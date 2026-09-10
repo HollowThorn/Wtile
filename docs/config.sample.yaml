@@ -46,7 +46,9 @@ bar:
   position: top # top | bottom
   segments:
     left: [tags, layout-symbol, window-title]
-    right: [clock]
+    # cpu/memory/battery/network/volume are slstatus-style system-stat modules -- battery renders
+    # nothing on a desktop with no system battery, volume renders nothing with no audio device.
+    right: [cpu, memory, battery, network, volume, clock]
   colors:
     background: "#1e1e2e"
     foreground: "#cdd6f4"
@@ -57,6 +59,21 @@ bar:
     # background/foreground so it stays readable against either. Set it to match "background"
     # above to make occupied tags blend in, keeping just the square as the occupancy indicator.
     # occupiedTag: "#1e1e2e"
+  # Optional per-module format-string overrides for the system-stat segments above. Omit a
+  # module here (or leave format: "") to use its built-in default shown below. {N} placeholders
+  # are positional (string.Format-style) -- a malformed format string falls back to the default
+  # instead of breaking the bar.
+  modules:
+    - name: cpu
+      format: "CPU {0}%"        # {0} = integer percent 0-100
+    - name: memory
+      format: "MEM {0}%"        # {0} = integer percent 0-100
+    - name: battery
+      format: "BAT {0}% {1}"    # {0} = percent, {1} = "Charging" | "AC" | ""
+    - name: network
+      format: "↓{0} ↑{1}"       # {0}/{1} = human rate strings, e.g. "1.2M"
+    - name: volume
+      format: "VOL {0}%{1}"     # {0} = percent, {1} = " MUTE" or ""
 
 hotkeys:
   # Live: entries below are real, working bindings.
