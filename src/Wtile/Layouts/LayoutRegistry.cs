@@ -20,6 +20,7 @@ public sealed class LayoutRegistry
         registry.Register(new MonocleLayout());
         registry.Register(new CenteredMasterLayout());
         registry.Register(new VerticalStackLayout());
+        registry.Register(new DeckLayout());
         return registry;
     }
 }

@@ -17,7 +17,9 @@ welcome.
 
 - **Dynamic tiling** with multiple layouts: master-stack (dwm's classic `[]=`, master column
   either side), monocle (`[M]`, one fullscreen window at a time), centered-master (`|M|`,
-  mango-style centered single window), and vertical-stack (`=`, full-width rows).
+  master column centered, single window centered from the start), vertical-stack (`=`,
+  full-width rows), and deck (`[D]`, dwm's deck patch — master area tiled, stack windows share
+  one rect like monocle).
 - **Tags, not virtual desktops** — dwm-style: each window belongs to a tag, tags are switched
   instantly, and each tag remembers its own layout, master count (`nmaster`), master/stack ratio
   (`mfact`), and gap independently.
