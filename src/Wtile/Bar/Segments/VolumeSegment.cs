@@ -8,28 +8,29 @@ namespace Wtile.Bar.Segments;
 internal sealed class VolumeSegment(BarTheme theme, string? format) : ISegment
 {
     private const float Padding = 12f;
-    private const string DefaultFormat = "VOL {0}%{1}";
+    private const string DefaultFormat = "VOL {0}%";
+    private const string MutedText = "MUTED"; // shown bare, ignoring the format string's own prefix/suffix
 
-    // The mute indicator's leading space lives in the glyph itself, not the format string, so an
-    // unmuted "VOL 42%" doesn't carry a trailing space.
-    private static bool TryComposeText(string? format, out string text)
+    private static string ComposeText(string? format, int percent) =>
+        SegmentFormat.Apply(format ?? DefaultFormat, DefaultFormat, percent);
+
+    public float Measure(Graphics g, Font font)
     {
-        if (!VolumeStats.TryGetVolume(out int percent, out bool muted))
-        {
-            text = "";
-            return false;
-        }
-        text = SegmentFormat.Apply(format ?? DefaultFormat, DefaultFormat, percent, muted ? " MUTE" : "");
-        return true;
+        if (!VolumeStats.TryGetVolume(out _, out _))
+            return 0;
+        // Reserves width for whichever of "VOL 100%"/"MUTED" is wider, so toggling mute or the
+        // percent's digit count doesn't shift the rest of the bar.
+        float unmutedWidth = g.MeasureString(ComposeText(format, 100), font).Width;
+        float mutedWidth = g.MeasureString(MutedText, font).Width;
+        return Math.Max(unmutedWidth, mutedWidth) + Padding;
     }
-
-    public float Measure(Graphics g, Font font) =>
-        TryComposeText(format, out string text) ? g.MeasureString(text, font).Width + Padding : 0;
 
     public void Draw(Graphics g, Font font, RectangleF bounds)
     {
-        if (!TryComposeText(format, out string text))
+        if (!VolumeStats.TryGetVolume(out int percent, out bool muted))
             return;
+
+        string text = muted ? MutedText : ComposeText(format, percent);
 
         using var brush = new SolidBrush(theme.Foreground);
         using var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };

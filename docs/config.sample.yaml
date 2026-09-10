@@ -48,7 +48,10 @@ bar:
     left: [tags, layout-symbol, window-title]
     # cpu/memory/battery/network/volume are slstatus-style system-stat modules -- battery renders
     # nothing on a desktop with no system battery, volume renders nothing with no audio device.
-    right: [cpu, memory, battery, network, volume, clock]
+    # network is listed first (leftmost of the right-aligned group) since its width jitters more
+    # than the others (B/K/M/G unit switching) -- that way its jitter only nudges the flexible
+    # window-title segment on the left, not the other modules to its right.
+    right: [network, cpu, memory, battery, volume, clock]
   colors:
     background: "#1e1e2e"
     foreground: "#cdd6f4"
@@ -73,7 +76,7 @@ bar:
     - name: network
       format: "↓{0} ↑{1}"       # {0}/{1} = human rate strings, e.g. "1.2M"
     - name: volume
-      format: "VOL {0}%{1}"     # {0} = percent, {1} = " MUTE" or ""
+      format: "VOL {0}%"        # {0} = integer percent 0-100; when muted, shows bare "MUTED" instead of this whole format
 
 hotkeys:
   # Live: entries below are real, working bindings.
