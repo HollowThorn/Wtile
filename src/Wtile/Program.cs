@@ -44,7 +44,7 @@ var defaultLayoutParams = new Dictionary<string, double>
 LayoutRegistry layouts = LayoutRegistry.CreateDefault();
 var manager = new WindowManager(layouts, initial.Config.General.DefaultLayout, defaultLayoutParams, initial.Config.General.TagCount);
 manager.InitializeMonitors();
-manager.SyncInitialTaskbarState(); // before BarWindow/Arrange: recognize an already-hidden taskbar from a previous run
+manager.SetTaskbarHidden(initial.Config.General.HideTaskbarOnStartup);
 manager.SetHideTitlebars(initial.Config.General.HideTitlebars);
 CommandRegistry commands = BuiltinCommands.CreateDefault(manager);
 using var tracker = new WinEventTracker();

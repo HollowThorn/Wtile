@@ -31,6 +31,13 @@ public sealed class GeneralConfig
     /// are remembered per-window and restored on exit, so turning this off (or quitting Wtile)
     /// gives windows their normal decorations back.</summary>
     public bool HideTitlebars { get; set; } = false;
+
+    /// <summary>Hides the real Windows taskbar as soon as Wtile starts, same as pressing
+    /// toggle-taskbar (Win+Space by default) manually right after launch. Enforced once at
+    /// startup regardless of whatever state the taskbar was left in by a previous run -- not
+    /// reapplied on "reload", since that would fight the toggle-taskbar hotkey during a live
+    /// session.</summary>
+    public bool HideTaskbarOnStartup { get; set; } = false;
 }
 
 public sealed class LayoutConfig

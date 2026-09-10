@@ -97,17 +97,18 @@ internal sealed unsafe class WindowManager
     public bool HasWindowsOnTag(int monitorIndex, int tagIndex) =>
         _windows.Exists(w => w.MonitorIndex == monitorIndex && (w.TagIndex == tagIndex || w.IsPinned));
 
-    /// <summary>Call once at startup, before the first Arrange(): if the real taskbar is already
-    /// hidden (e.g. a previous run hid it and exited before restoring it), recognize that instead
-    /// of defaulting to "shown" and leaving its reserved space unused.</summary>
-    public void SyncInitialTaskbarState() => IsTaskbarHidden = !TaskbarController.IsVisible();
-
-    public void ToggleTaskbar()
+    /// <summary>Hides or shows the real Windows taskbar and reclaims/releases its space for
+    /// tiling. Called both by toggle-taskbar and, once at startup, to enforce
+    /// general.hideTaskbarOnStartup regardless of whatever state the taskbar happened to be left
+    /// in by a previous run.</summary>
+    public void SetTaskbarHidden(bool hidden)
     {
-        IsTaskbarHidden = !IsTaskbarHidden;
-        TaskbarController.SetVisible(!IsTaskbarHidden);
+        IsTaskbarHidden = hidden;
+        TaskbarController.SetVisible(!hidden);
         Arrange();
     }
+
+    public void ToggleTaskbar() => SetTaskbarHidden(!IsTaskbarHidden);
 
     /// <summary>Applies (or lifts) title-bar hiding across every currently-tracked window --
     /// called from config load/reload with general.hideTitlebars, and with false at shutdown so

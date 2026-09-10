@@ -17,6 +17,9 @@ general:
   # Original styles are remembered per-window and restored on quit (or if you flip this back off
   # + reload), so this is safe to toggle without leaving windows permanently borderless.
   hideTitlebars: false
+  # Hides the real Windows taskbar as soon as Wtile starts, same as pressing toggle-taskbar
+  # (Win+Space by default) right after launch. Only applies at startup, not on reload.
+  hideTaskbarOnStartup: false
 
 layouts:
   # Every tag starts on master-stack with these params (see hotkeys --- layout --- below for how
