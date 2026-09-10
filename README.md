@@ -17,14 +17,17 @@ welcome.
 
 - **Dynamic tiling** with multiple layouts: master-stack (dwm's classic `[]=`, master column
   either side), monocle (`[M]`, one fullscreen window at a time), centered-master (`|M|`,
-  mango-style centered single window), and vertical-stack (`=`, full-width rows).
+  master column centered, single window centered from the start), vertical-stack (`=`,
+  full-width rows), and deck (`[D]`, dwm's deck patch — master area tiled, stack windows share
+  one rect like monocle).
 - **Tags, not virtual desktops** — dwm-style: each window belongs to a tag, tags are switched
   instantly, and each tag remembers its own layout, master count (`nmaster`), master/stack ratio
   (`mfact`), and gap independently.
 - **Multi-monitor**, dwm-style: each monitor gets its own tags and layout state off one shared
   config, with `focus-monitor`/`move-window-to-monitor` to move between them.
 - **Status bar** per monitor: tags (with an occupancy indicator), current layout symbol, focused
-  window title, clock — GDI+ rendered, click-to-switch-tag.
+  window title, clock — GDI+ rendered, click-to-switch-tag. Optional slstatus-style system-stat
+  modules (CPU%, memory%, battery, network up/down, volume), each with a configurable format string.
 - **Global hotkeys** via a low-level keyboard hook, not `RegisterHotKey` — because Windows reserves
   most of the `Win+<key>` space for the shell, this actually works for bare `Win+letter` bindings
   the way dwm/bug.n users expect.

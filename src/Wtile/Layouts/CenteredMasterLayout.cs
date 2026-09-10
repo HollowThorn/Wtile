@@ -6,8 +6,8 @@ namespace Wtile.Layouts;
 /// left (first stack window right, second left, third right, ...), each side stacked vertically
 /// and sized to half the remaining width. With more than one master-only window and no stack,
 /// they fill the whole width like plain master-stack. With exactly one window total, though, it
-/// gets a centered box (mfact-sized on both axes, mango-style) instead of stretching fullscreen
-/// -- centered-master should look centered even with nothing to flank the master column.
+/// gets a centered box (mfact-sized on both axes) instead of stretching fullscreen -- centered-
+/// master should look centered even with nothing to flank the master column.
 /// </summary>
 public sealed class CenteredMasterLayout : ILayout
 {

@@ -83,7 +83,7 @@ public class MasterStackLayoutTests
     [Fact]
     public void ThreeWindows_Nmaster2_MasterColumnsAreSideBySide_NotStacked()
     {
-        // bug.n-style: unlike dwm/mango, master windows sit side by side as columns, not stacked
+        // bug.n-style: unlike dwm, master windows sit side by side as columns, not stacked
         // in rows. 3 windows, nmaster=2 -> master area splits into two columns; only the stack
         // window (the 3rd) is on its own.
         var layout = new MasterStackLayout();

@@ -97,17 +97,18 @@ internal sealed unsafe class WindowManager
     public bool HasWindowsOnTag(int monitorIndex, int tagIndex) =>
         _windows.Exists(w => w.MonitorIndex == monitorIndex && (w.TagIndex == tagIndex || w.IsPinned));
 
-    /// <summary>Call once at startup, before the first Arrange(): if the real taskbar is already
-    /// hidden (e.g. a previous run hid it and exited before restoring it), recognize that instead
-    /// of defaulting to "shown" and leaving its reserved space unused.</summary>
-    public void SyncInitialTaskbarState() => IsTaskbarHidden = !TaskbarController.IsVisible();
-
-    public void ToggleTaskbar()
+    /// <summary>Hides or shows the real Windows taskbar and reclaims/releases its space for
+    /// tiling. Called both by toggle-taskbar and, once at startup, to enforce
+    /// general.hideTaskbarOnStartup regardless of whatever state the taskbar happened to be left
+    /// in by a previous run.</summary>
+    public void SetTaskbarHidden(bool hidden)
     {
-        IsTaskbarHidden = !IsTaskbarHidden;
-        TaskbarController.SetVisible(!IsTaskbarHidden);
+        IsTaskbarHidden = hidden;
+        TaskbarController.SetVisible(!hidden);
         Arrange();
     }
+
+    public void ToggleTaskbar() => SetTaskbarHidden(!IsTaskbarHidden);
 
     /// <summary>Applies (or lifts) title-bar hiding across every currently-tracked window --
     /// called from config load/reload with general.hideTitlebars, and with false at shutdown so
@@ -227,6 +228,16 @@ internal sealed unsafe class WindowManager
     {
         if (IgnoredFocusHandles.Contains(hwnd))
             return;
+
+        // Some apps' main window becomes visible via a DWM "uncloak" rather than a fresh
+        // SW_SHOW (observed with Firefox) -- WinEventTracker only listens for EVENT_OBJECT_SHOW,
+        // so that transition never reaches TryAdd and the window is silently left untracked.
+        // EVENT_SYSTEM_FOREGROUND fires reliably regardless of how a window became visible, so
+        // give any not-yet-tracked window one more chance to be picked up right when it's
+        // actually used (subject to the same manageable-window filter as everything else).
+        if (Find(hwnd) is null)
+            TryAdd(hwnd, arrange: true);
+
         FocusedHandle = hwnd;
         FocusedTitle = WindowInspector.GetWindowText(hwnd);
 
@@ -574,7 +585,18 @@ internal sealed unsafe class WindowManager
 
         WindowSnapshot snapshot = WindowInspector.Describe(hwnd);
         if (!WindowFilter.IsManageable(snapshot))
+        {
+            // Only titled windows -- most filtered-out windows are untitled shell/helper surfaces
+            // and would otherwise drown this out. Diagnoses "app X doesn't tile" reports: shows
+            // exactly which check rejected it instead of guessing.
+            if (!string.IsNullOrWhiteSpace(snapshot.Title))
+            {
+                Console.WriteLine($"[filter] Skipped '{snapshot.Title}' (class={snapshot.ClassName}) -- "
+                    + $"visible={snapshot.IsVisible} topLevel={snapshot.IsTopLevel} hasOwner={snapshot.HasOwner} "
+                    + $"toolWindow={snapshot.IsToolWindow} appWindow={snapshot.IsAppWindow} cloaked={snapshot.IsCloaked}");
+            }
             return;
+        }
 
         int monitorIndex = ResolveMonitorIndex(hwnd);
         Monitor monitor = _monitors[monitorIndex];

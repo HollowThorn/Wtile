@@ -9,25 +9,30 @@ general:
   focusFollowsMouse: false
   borderGap: 0
   # Layout every tag on every monitor starts on: master-stack, master-stack-right, monocle,
-  # centered-master, or vertical (see layouts: below). Its nmaster/mfact/gap still come from the
-  # "master-stack" entry below regardless of which of these is picked -- per-tag/monitor layout
-  # config isn't supported yet, just the starting layout name.
+  # centered-master, vertical, or deck (see layouts: below). Its nmaster/mfact/gap still come
+  # from the "master-stack" entry below regardless of which of these is picked -- per-tag/monitor
+  # layout config isn't supported yet, just the starting layout name.
   defaultLayout: master-stack
   # Strips the title bar and resize border from every managed window (tiled and floating alike).
   # Original styles are remembered per-window and restored on quit (or if you flip this back off
   # + reload), so this is safe to toggle without leaving windows permanently borderless.
   hideTitlebars: false
+  # Hides the real Windows taskbar as soon as Wtile starts, same as pressing toggle-taskbar
+  # (Win+Space by default) right after launch. Only applies at startup, not on reload.
+  hideTaskbarOnStartup: false
 
 layouts:
   # Every tag starts on master-stack with these params (see hotkeys --- layout --- below for how
   # per-tag values then diverge, including gap via adjust-gap/toggle-gap). "master-stack-right"
   # (master column on the right, "=[]"), "monocle" ("[M]", every window fullscreen, only the
   # focused one visible), "centered-master" ("|M|", master centered with stack windows
-  # alternating left/right of it), and "vertical" ("=", every window a full-width row, no master)
-  # are also registered and selectable via set-layout (Win+T / Win+M / Win+W / Win+Shift+V below)
-  # -- they don't need their own entry here: master-stack-right and centered-master reuse
-  # whichever nmaster/mfact/gap the tag already has (same params, just arranged differently),
-  # monocle ignores those params entirely, and vertical only looks at gap.
+  # alternating left/right of it), "vertical" ("=", every window a full-width row, no master), and
+  # "deck" ("[D]", master area same as master-stack but every stack window shares the same rect,
+  # like monocle confined to just the stack area) are also registered and selectable via
+  # set-layout (Win+T / Win+M / Win+W / Win+Shift+V / Win+Shift+D below) -- they don't need their
+  # own entry here: master-stack-right, centered-master, and deck reuse whichever nmaster/mfact/
+  # gap the tag already has (same params, just arranged differently), monocle ignores those
+  # params entirely, and vertical only looks at gap.
   - name: master-stack
     symbol: "[]="
     nmaster: 1
@@ -41,7 +46,12 @@ bar:
   position: top # top | bottom
   segments:
     left: [tags, layout-symbol, window-title]
-    right: [clock]
+    # cpu/memory/battery/network/volume are slstatus-style system-stat modules -- battery renders
+    # nothing on a desktop with no system battery, volume renders nothing with no audio device.
+    # network is listed first (leftmost of the right-aligned group) since its width jitters more
+    # than the others (B/K/M/G unit switching) -- that way its jitter only nudges the flexible
+    # window-title segment on the left, not the other modules to its right.
+    right: [network, cpu, memory, battery, volume, clock]
   colors:
     background: "#1e1e2e"
     foreground: "#cdd6f4"
@@ -52,6 +62,21 @@ bar:
     # background/foreground so it stays readable against either. Set it to match "background"
     # above to make occupied tags blend in, keeping just the square as the occupancy indicator.
     # occupiedTag: "#1e1e2e"
+  # Optional per-module format-string overrides for the system-stat segments above. Omit a
+  # module here (or leave format: "") to use its built-in default shown below. {N} placeholders
+  # are positional (string.Format-style) -- a malformed format string falls back to the default
+  # instead of breaking the bar.
+  modules:
+    - name: cpu
+      format: "CPU {0}%"        # {0} = integer percent 0-100
+    - name: memory
+      format: "MEM {0}%"        # {0} = integer percent 0-100
+    - name: battery
+      format: "BAT {0}% {1}"    # {0} = percent, {1} = "Charging" | "AC" | ""
+    - name: network
+      format: "↓{0} ↑{1}"       # {0}/{1} = human rate strings, e.g. "1.2M"
+    - name: volume
+      format: "VOL {0}%"        # {0} = integer percent 0-100; when muted, shows bare "MUTED" instead of this whole format
 
 hotkeys:
   # Live: entries below are real, working bindings.
@@ -115,6 +140,9 @@ hotkeys:
   - keys: "Win+Shift+V"
     command: set-layout            # every window gets a full-width row, stacked top to bottom
     args: ["vertical"]
+  - keys: "Win+Shift+D"
+    command: set-layout            # master area same as master-stack, but every stack window
+    args: ["deck"]                 # shares the same rect (like monocle, confined to the stack area)
 
   # Gap controls: plain Win+= toggles, both adjustments take Shift.
   - keys: "Win+Shift+-"

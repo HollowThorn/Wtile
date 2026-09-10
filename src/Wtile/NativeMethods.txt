@@ -73,3 +73,15 @@ GetWindowRect
 GetMonitorInfo
 MonitorFromWindow
 MONITORINFOF_PRIMARY
+GetSystemTimes
+GlobalMemoryStatusEx
+GetSystemPowerStatus
+GetIfTable2
+FreeMibTable
+IMMDeviceEnumerator
+IMMDevice
+IAudioEndpointVolume
+MMDeviceEnumerator
+CoCreateInstance
+CoInitializeEx
+CoUninitialize
