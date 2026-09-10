@@ -228,6 +228,16 @@ internal sealed unsafe class WindowManager
     {
         if (IgnoredFocusHandles.Contains(hwnd))
             return;
+
+        // Some apps' main window becomes visible via a DWM "uncloak" rather than a fresh
+        // SW_SHOW (observed with Firefox) -- WinEventTracker only listens for EVENT_OBJECT_SHOW,
+        // so that transition never reaches TryAdd and the window is silently left untracked.
+        // EVENT_SYSTEM_FOREGROUND fires reliably regardless of how a window became visible, so
+        // give any not-yet-tracked window one more chance to be picked up right when it's
+        // actually used (subject to the same manageable-window filter as everything else).
+        if (Find(hwnd) is null)
+            TryAdd(hwnd, arrange: true);
+
         FocusedHandle = hwnd;
         FocusedTitle = WindowInspector.GetWindowText(hwnd);
 
@@ -575,7 +585,18 @@ internal sealed unsafe class WindowManager
 
         WindowSnapshot snapshot = WindowInspector.Describe(hwnd);
         if (!WindowFilter.IsManageable(snapshot))
+        {
+            // Only titled windows -- most filtered-out windows are untitled shell/helper surfaces
+            // and would otherwise drown this out. Diagnoses "app X doesn't tile" reports: shows
+            // exactly which check rejected it instead of guessing.
+            if (!string.IsNullOrWhiteSpace(snapshot.Title))
+            {
+                Console.WriteLine($"[filter] Skipped '{snapshot.Title}' (class={snapshot.ClassName}) -- "
+                    + $"visible={snapshot.IsVisible} topLevel={snapshot.IsTopLevel} hasOwner={snapshot.HasOwner} "
+                    + $"toolWindow={snapshot.IsToolWindow} appWindow={snapshot.IsAppWindow} cloaked={snapshot.IsCloaked}");
+            }
             return;
+        }
 
         int monitorIndex = ResolveMonitorIndex(hwnd);
         Monitor monitor = _monitors[monitorIndex];
