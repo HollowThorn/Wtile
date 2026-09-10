@@ -1,0 +1,227 @@
+# Wtile configuration.
+# Not watched live -- after editing and saving, press the "reload" hotkey (Win+Shift+R by
+# default, see --- session --- below) to apply. That hotkey also unconditionally refreshes the
+# bar's screen geometry, so it doubles as the fix for a stale bar/layout after connecting or
+# disconnecting a monitor.
+
+general:
+  tagCount: 9
+  focusFollowsMouse: false
+  borderGap: 0
+  # Layout every tag on every monitor starts on: master-stack, master-stack-right, monocle,
+  # centered-master, or vertical (see layouts: below). Its nmaster/mfact/gap still come from the
+  # "master-stack" entry below regardless of which of these is picked -- per-tag/monitor layout
+  # config isn't supported yet, just the starting layout name.
+  defaultLayout: master-stack
+  # Strips the title bar and resize border from every managed window (tiled and floating alike).
+  # Original styles are remembered per-window and restored on quit (or if you flip this back off
+  # + reload), so this is safe to toggle without leaving windows permanently borderless.
+  hideTitlebars: false
+
+layouts:
+  # Every tag starts on master-stack with these params (see hotkeys --- layout --- below for how
+  # per-tag values then diverge, including gap via adjust-gap/toggle-gap). "master-stack-right"
+  # (master column on the right, "=[]"), "monocle" ("[M]", every window fullscreen, only the
+  # focused one visible), "centered-master" ("|M|", master centered with stack windows
+  # alternating left/right of it), and "vertical" ("=", every window a full-width row, no master)
+  # are also registered and selectable via set-layout (Win+T / Win+M / Win+W / Win+Shift+V below)
+  # -- they don't need their own entry here: master-stack-right and centered-master reuse
+  # whichever nmaster/mfact/gap the tag already has (same params, just arranged differently),
+  # monocle ignores those params entirely, and vertical only looks at gap.
+  - name: master-stack
+    symbol: "[]="
+    nmaster: 1
+    mfact: 0.55
+    gap: 0
+
+bar:
+  height: 24
+  fontFamily: "Segoe UI"
+  fontSize: 10
+  position: top # top | bottom
+  segments:
+    left: [tags, layout-symbol, window-title]
+    right: [clock]
+  colors:
+    background: "#1e1e2e"
+    foreground: "#cdd6f4"
+    activeTag: "#89b4fa"
+    urgentTag: "#f38ba8"
+    # occupiedTag: background for an occupied-but-not-active tag pill (the small occupancy
+    # square shows on any occupied tag regardless). Left unset (default), it's derived from
+    # background/foreground so it stays readable against either. Set it to match "background"
+    # above to make occupied tags blend in, keeping just the square as the occupancy indicator.
+    # occupiedTag: "#1e1e2e"
+
+hotkeys:
+  # Live: entries below are real, working bindings.
+  #
+  # Heads up: Windows itself already owns several Win+<key> combos (Win+E, Win+1-9, Win+Tab,
+  # and -- unlike everything else -- Win+L specifically can NEVER be bound by any app: it's
+  # hardcoded to lock the workstation, below even our low-level keyboard hook, same as
+  # Ctrl+Alt+Delete). Bare Win+<key> combos besides Win+L DO work here (via a low-level keyboard
+  # hook, not RegisterHotKey -- see Hotkeys/HotkeyManager.cs for why that matters on Windows).
+
+  # --- spawn ---
+  - keys: "Win+Shift+T"
+    command: spawn
+    args: ["wt.exe"]
+  - keys: "Win+E"
+    command: spawn
+    args: ["chrome.exe"]
+
+  # --- focus / window ---
+  - keys: "Win+J"
+    command: focus-next
+  - keys: "Win+K"
+    command: focus-prev
+  - keys: "Win+Tab"
+    command: focus-next
+  - keys: "Win+X"
+    command: swap-master           # swaps the focused window with master
+  - keys: "Win+Q"
+    command: kill-window
+  - keys: "Win+G"
+    command: toggle-floating
+
+  # --- layout ---
+  # nmaster/mfact/gap below seed every tag's starting values, but each tag then tracks its own
+  # copy independently (adjust-mfact on tag 3 doesn't touch tag 1). "reload" resets every tag
+  # back to these values.
+  #
+  # mfact uses Win+Shift+H/L rather than plain Win+H/Win+L, since Win+L can never be bound (see
+  # the Win+L note above) and would otherwise silently never fire.
+  - keys: "Win+Shift+H"
+    command: adjust-mfact
+    args: ["-0.05"]
+  - keys: "Win+Shift+L"
+    command: adjust-mfact
+    args: ["0.05"]
+  - keys: "Win+I"
+    command: adjust-nmaster
+    args: ["1"]
+  - keys: "Win+D"
+    command: adjust-nmaster
+    args: ["-1"]
+  - keys: "Win+T"
+    command: set-layout
+    args: ["master-stack-right"]
+  - keys: "Win+M"
+    command: set-layout
+    args: ["monocle"]
+  - keys: "Win+W"
+    command: set-layout
+    args: ["centered-master"]
+  - keys: "Win+Shift+V"
+    command: set-layout            # every window gets a full-width row, stacked top to bottom
+    args: ["vertical"]
+
+  # Gap controls: plain Win+= toggles, both adjustments take Shift.
+  - keys: "Win+Shift+-"
+    command: adjust-gap
+    args: ["-5"]
+  - keys: "Win+Shift+="
+    command: adjust-gap
+    args: ["5"]
+  - keys: "Win+="                 # toggles the gap between 0 and whatever it last was
+    command: toggle-gap
+
+  # --- tags 1-9 ---
+  - keys: "Win+1"
+    command: view-tag
+    args: ["1"]
+  - keys: "Win+2"
+    command: view-tag
+    args: ["2"]
+  - keys: "Win+3"
+    command: view-tag
+    args: ["3"]
+  - keys: "Win+4"
+    command: view-tag
+    args: ["4"]
+  - keys: "Win+5"
+    command: view-tag
+    args: ["5"]
+  - keys: "Win+6"
+    command: view-tag
+    args: ["6"]
+  - keys: "Win+7"
+    command: view-tag
+    args: ["7"]
+  - keys: "Win+8"
+    command: view-tag
+    args: ["8"]
+  - keys: "Win+9"
+    command: view-tag
+    args: ["9"]
+  # move-window-to-tag always drops the window there, unpinning it first if it was pinned (see
+  # toggle-pinned below) -- e.g. pin a window, then Win+Shift+3 to drop it onto tag 3 instead of
+  # having to switch to tag 3 and toggle-pinned it off from there.
+  - keys: "Win+Shift+1"
+    command: move-window-to-tag
+    args: ["1"]
+  - keys: "Win+Shift+2"
+    command: move-window-to-tag
+    args: ["2"]
+  - keys: "Win+Shift+3"
+    command: move-window-to-tag
+    args: ["3"]
+  - keys: "Win+Shift+4"
+    command: move-window-to-tag
+    args: ["4"]
+  - keys: "Win+Shift+5"
+    command: move-window-to-tag
+    args: ["5"]
+  - keys: "Win+Shift+6"
+    command: move-window-to-tag
+    args: ["6"]
+  - keys: "Win+Shift+7"
+    command: move-window-to-tag
+    args: ["7"]
+  - keys: "Win+Shift+8"
+    command: move-window-to-tag
+    args: ["8"]
+  - keys: "Win+Shift+9"
+    command: move-window-to-tag
+    args: ["9"]
+  - keys: "Win+0"                 # view every tag's windows together; press any specific tag
+    command: view-all-tags        # key to go back to viewing just that one
+  - keys: "Win+Shift+0"           # pin the focused window so it stays visible/tiled across
+    command: toggle-pinned        # every tag switch, regardless of its own tag
+  - keys: "Win+`"
+    command: toggle-last-tag      # toggle back to the previously-viewed tag
+  - keys: "Win+A"
+    command: shift-view           # view the tag one to the left, relative
+    args: ["-1"]
+  - keys: "Win+S"
+    command: shift-view           # view the tag one to the right, relative
+    args: ["1"]
+
+  # --- monitors ---
+  # Each monitor has its own tags/active-tag/layout state -- the config below is shared (same tag
+  # count, same default layout) but each monitor then diverges independently at runtime, same as
+  # tags already do. "Current monitor" follows whichever window you last focused, or whichever
+  # monitor's bar you last clicked a tag on.
+  - keys: "Win+,"
+    command: focus-monitor
+    args: ["-1"]
+  - keys: "Win+."
+    command: focus-monitor
+    args: ["1"]
+  - keys: "Win+Shift+,"
+    command: move-window-to-monitor
+    args: ["-1"]
+  - keys: "Win+Shift+."
+    command: move-window-to-monitor
+    args: ["1"]
+
+  # --- bar / taskbar ---
+  - keys: "Win+Space"              # hides the real Windows taskbar entirely (not Windows' own
+    command: toggle-taskbar        # auto-hide, which still peeks out on mouse-hover at the edge)
+                                    # and reclaims its space for tiling.
+
+  # --- session ---
+  - keys: "Win+Shift+Q"
+    command: quit
+  - keys: "Win+Shift+R"           # re-reads config.yaml and refreshes bar/screen geometry in place
+    command: reload

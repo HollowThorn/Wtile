@@ -1,0 +1,76 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.Accessibility;
+
+namespace Wtile.Core;
+
+/// <summary>
+/// Wraps <c>SetWinEventHook</c> (OUT_OF_CONTEXT) so <see cref="WindowManager"/> hears about
+/// window show/hide/destroy/minimize without polling. Delivery requires a running
+/// GetMessage/DispatchMessage loop on the thread that constructs this tracker.
+/// </summary>
+internal sealed unsafe class WinEventTracker : IDisposable
+{
+    private HWINEVENTHOOK _hook;
+
+    public WinEventTracker()
+    {
+        _hook = PInvoke.SetWinEventHook(
+            PInvoke.EVENT_MIN,
+            PInvoke.EVENT_OBJECT_END,
+            HMODULE.Null,
+            &WinEventProc,
+            0,
+            0,
+            PInvoke.WINEVENT_OUTOFCONTEXT);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static void WinEventProc(
+        HWINEVENTHOOK hWinEventHook, uint eventId, HWND hwnd, int idObject, int idChild, uint idEventThread, uint dwmsEventTime)
+    {
+        WindowManager? target = WindowManager.Current;
+        if (target is null || hwnd.IsNull)
+            return;
+
+        // idObject == OBJID_WINDOW (0) && idChild == CHILDID_SELF (0): the window itself, not
+        // one of its child controls -- otherwise this callback fires for every UI element.
+        if (idObject != 0 || idChild != 0)
+            return;
+
+        switch (eventId)
+        {
+            case PInvoke.EVENT_OBJECT_SHOW:
+                target.OnWindowShown(hwnd);
+                break;
+            case PInvoke.EVENT_OBJECT_HIDE:
+                target.OnWindowHidden(hwnd);
+                break;
+            case PInvoke.EVENT_OBJECT_DESTROY:
+                target.OnWindowDestroyed(hwnd);
+                break;
+            case PInvoke.EVENT_SYSTEM_MINIMIZESTART:
+                target.OnMinimizeChanged(hwnd, minimized: true);
+                break;
+            case PInvoke.EVENT_SYSTEM_MINIMIZEEND:
+                target.OnMinimizeChanged(hwnd, minimized: false);
+                break;
+            case PInvoke.EVENT_SYSTEM_FOREGROUND:
+                target.OnForegroundChanged(hwnd);
+                break;
+            case PInvoke.EVENT_OBJECT_NAMECHANGE:
+                target.OnTitleChanged(hwnd);
+                break;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_hook.IsNull)
+            return;
+        PInvoke.UnhookWinEvent(_hook);
+        _hook = default;
+    }
+}

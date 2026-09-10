@@ -1,0 +1,39 @@
+name: Release
+
+# Push a tag like "v0.1.0" to build a self-contained win-x64 binary and attach it to a GitHub
+# Release: `git tag v0.1.0 && git push origin v0.1.0`.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore Wtile.slnx
+
+      - name: Test
+        run: dotnet test tests/Wtile.Tests/Wtile.Tests.csproj -c Release
+
+      - name: Publish (NativeAOT, self-contained win-x64)
+        run: dotnet publish src/Wtile/Wtile.csproj -c Release -r win-x64 --self-contained -o publish
+
+      - name: Zip
+        run: Compress-Archive -Path publish/* -DestinationPath Wtile-win-x64.zip
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Wtile-win-x64.zip
+          generate_release_notes: true
