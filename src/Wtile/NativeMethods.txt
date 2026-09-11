@@ -79,3 +79,6 @@ GetWindowRect
 GetMonitorInfo
 MonitorFromWindow
 MONITORINFOF_PRIMARY
+CreateSolidBrush
+FillRect
+DeleteObject

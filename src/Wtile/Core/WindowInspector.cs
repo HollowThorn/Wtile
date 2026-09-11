@@ -217,4 +217,20 @@ internal static unsafe class WindowInspector
 
         return (visible.left - actual.left, visible.top - actual.top, actual.right - visible.right, actual.bottom - visible.bottom);
     }
+
+    /// <summary>The window's true on-screen rect (DWM's "extended frame bounds" -- see
+    /// GetInvisibleBorderInsets), for drawing something (e.g. a focus border) flush against what
+    /// the user actually sees rather than the wider GetWindowRect that includes the invisible
+    /// resize-handle margin. Falls back to GetWindowRect if the DWM query fails.</summary>
+    public static RECT GetVisibleBounds(HWND hwnd)
+    {
+        RECT visible;
+        HRESULT hr = PInvoke.DwmGetWindowAttribute(
+            hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &visible, (uint)sizeof(RECT));
+        if (hr.Succeeded)
+            return visible;
+
+        PInvoke.GetWindowRect(hwnd, out RECT actual);
+        return actual;
+    }
 }

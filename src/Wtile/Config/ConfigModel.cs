@@ -32,6 +32,13 @@ public sealed class GeneralConfig
     /// are remembered per-window and restored on exit, so turning this off (or quitting Wtile)
     /// gives windows their normal decorations back.</summary>
     public bool HideTitlebars { get; set; } = false;
+
+    /// <summary>Width in px of the colored border drawn around whichever managed window currently
+    /// has focus (dwm/mango-style). 0 disables it entirely.</summary>
+    public int FocusedBorderWidth { get; set; } = 1;
+
+    /// <summary>Color of the focused-window border, as "#RRGGBB". Ignored if FocusedBorderWidth is 0.</summary>
+    public string FocusedBorderColor { get; set; } = "#89b4fa";
 }
 
 public sealed class LayoutConfig

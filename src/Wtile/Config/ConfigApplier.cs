@@ -8,7 +8,7 @@ namespace Wtile.Config;
 /// run on the main thread. Bar config (colors/font/segments) is shared config applied to every
 /// monitor's bar identically -- matching the tag/layout config, which is also shared but then
 /// diverges independently per monitor at runtime.</summary>
-internal sealed class ConfigApplier(WindowManager manager, IReadOnlyList<BarWindow> bars, HotkeyManager hotkeys)
+internal sealed class ConfigApplier(WindowManager manager, IReadOnlyList<BarWindow> bars, HotkeyManager hotkeys, FocusBorderWindow focusBorder)
 {
     public void Apply(WtileConfig config)
     {
@@ -27,6 +27,7 @@ internal sealed class ConfigApplier(WindowManager manager, IReadOnlyList<BarWind
         if (manager.HideTitlebars != config.General.HideTitlebars)
             manager.SetHideTitlebars(config.General.HideTitlebars);
         manager.SetBlacklist(BlacklistCompiler.Compile(config.Blacklist));
+        focusBorder.ApplyConfig(config.General);
         foreach (BarWindow bar in bars)
             bar.ApplyConfig(config.Bar);
         hotkeys.ApplyBindings(config.Hotkeys);

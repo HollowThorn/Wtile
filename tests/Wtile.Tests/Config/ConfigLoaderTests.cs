@@ -108,6 +108,17 @@ public class ConfigLoaderTests
     }
 
     [Fact]
+    public void NegativeFocusedBorderWidth_ClampedToZeroWithWarning()
+    {
+        const string yaml = "general:\n  focusedBorderWidth: -2\n";
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Equal(0, result.Config.General.FocusedBorderWidth);
+        Assert.Contains(result.Warnings, w => w.Contains("focusedBorderWidth"));
+    }
+
+    [Fact]
     public void InvalidBarPosition_DefaultsToTopWithWarning()
     {
         const string yaml = "bar:\n  position: sideways\n";

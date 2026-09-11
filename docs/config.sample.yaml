@@ -17,6 +17,11 @@ general:
   # Original styles are remembered per-window and restored on quit (or if you flip this back off
   # + reload), so this is safe to toggle without leaving windows permanently borderless.
   hideTitlebars: false
+  # Colored border (dwm/mango-style) around whichever managed window currently has focus, drawn
+  # flush against the window's own visible edge (not in the gap, so it works the same whether
+  # borderGap/layout gap is 0 or not). 0 disables it entirely.
+  focusedBorderWidth: 1
+  focusedBorderColor: "#89b4fa"
 
 # blacklist: exclude specific windows from tiling entirely, matched by regex against the
 # window's process name, window class name, and/or title (case-insensitive, unanchored -- add

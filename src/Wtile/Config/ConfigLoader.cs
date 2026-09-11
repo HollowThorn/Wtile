@@ -50,6 +50,11 @@ public static class ConfigLoader
             warnings.Add("general.borderGap cannot be negative; clamped to 0.");
             config.General.BorderGap = 0;
         }
+        if (config.General.FocusedBorderWidth < 0)
+        {
+            warnings.Add("general.focusedBorderWidth cannot be negative; clamped to 0.");
+            config.General.FocusedBorderWidth = 0;
+        }
 
         if (config.Layouts.Count == 0)
         {

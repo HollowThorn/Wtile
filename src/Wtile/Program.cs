@@ -56,10 +56,12 @@ var bars = new List<BarWindow>();
 for (int i = 0; i < manager.Monitors.Count; i++)
     bars.Add(new BarWindow(manager, commands, initial.Config.Bar, manager.Monitors[i], i));
 
+using var focusBorder = new FocusBorderWindow(manager, initial.Config.General.FocusedBorderWidth, initial.Config.General.FocusedBorderColor);
+
 using var hotkeys = new HotkeyManager(commands);
 hotkeys.ApplyBindings(initial.Config.Hotkeys);
 
-var applier = new ConfigApplier(manager, bars, hotkeys);
+var applier = new ConfigApplier(manager, bars, hotkeys, focusBorder);
 commands.Register(new ReloadCommand(configPath, applier, bars));
 
 manager.Seed();
