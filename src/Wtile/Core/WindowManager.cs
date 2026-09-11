@@ -207,6 +207,26 @@ internal sealed unsafe class WindowManager
 
     public void OnWindowShown(HWND hwnd) => TryAdd(hwnd, arrange: true);
 
+    private const nuint RearrangeTimerId = 1;
+
+    /// <summary>Schedules a one-shot re-arrange after delayMs, coalescing repeated calls (same
+    /// hWnd/id resets the pending timer rather than stacking). Used right after adding a window
+    /// via EVENT_OBJECT_UNCLOAKED (see WinEventTracker): that first Arrange() can race ahead of
+    /// the app settling its own geometry, or of DWM's extended-frame-bounds (used to compensate
+    /// for the invisible resize border, see GetInvisibleBorderInsets) catching up to the
+    /// just-uncloaked window -- observed as Firefox opening at the wrong size/position, spilling
+    /// under the bar, until something else (e.g. switching layouts) forces a fresh Arrange().
+    /// This follow-up corrects it automatically instead of requiring that manual nudge.</summary>
+    public void ScheduleRearrange(uint delayMs) =>
+        PInvoke.SetTimer(HWND.Null, RearrangeTimerId, delayMs, &RearrangeTimerProc);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static void RearrangeTimerProc(HWND hwnd, uint msg, nuint idEvent, uint dwTime)
+    {
+        PInvoke.KillTimer(HWND.Null, idEvent);
+        Current?.Arrange();
+    }
+
     public void OnWindowHidden(HWND hwnd)
     {
         if (_selfHidden.Remove(hwnd))
