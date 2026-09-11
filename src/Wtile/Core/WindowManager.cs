@@ -444,7 +444,7 @@ internal sealed unsafe class WindowManager
     /// own TagIndex, but not across monitors), or every tag is while
     /// <see cref="Monitor.IsViewingAllTags"/> (dwm's view(~0)). Pinned windows never cross
     /// monitors -- MonitorIndex must already match.</summary>
-    private static bool IsVisibleOn(ManagedWindow w, Monitor monitor, int monitorIndex) =>
+    internal static bool IsVisibleOn(ManagedWindow w, Monitor monitor, int monitorIndex) =>
         w.MonitorIndex == monitorIndex && (monitor.IsViewingAllTags || w.TagIndex == monitor.ActiveTagIndex || w.IsPinned);
 
     /// <summary>Pins/unpins the focused window so it stays visible across every tag switch on its

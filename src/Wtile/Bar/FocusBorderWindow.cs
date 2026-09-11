@@ -7,6 +7,7 @@ using Windows.Win32.Graphics.Gdi;
 using Windows.Win32.UI.WindowsAndMessaging;
 using Wtile.Config;
 using Wtile.Core;
+using Monitor = Wtile.Core.Monitor;
 
 namespace Wtile.Bar;
 
@@ -73,6 +74,17 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
         }
 
         if (_width <= 0 || focused is null || focused.IsMinimized)
+        {
+            Hide();
+            return;
+        }
+
+        // A window stays tracked (and FocusedHandle can still point at it) after a tag switch
+        // hides it -- e.g. it was on tag 1, you switch to tag 2, and nothing else grabs OS focus
+        // to fire a new EVENT_SYSTEM_FOREGROUND. Without this check the border keeps framing an
+        // invisible window on a tag you've since left.
+        Monitor monitor = _manager.Monitors[focused.MonitorIndex];
+        if (!WindowManager.IsVisibleOn(focused, monitor, focused.MonitorIndex))
         {
             Hide();
             return;
