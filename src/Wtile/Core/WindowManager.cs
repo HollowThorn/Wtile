@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.System.Threading;
 using Windows.Win32.UI.WindowsAndMessaging;
 using Wtile.Layouts;
 
@@ -24,6 +25,8 @@ internal sealed unsafe class WindowManager
     private readonly LayoutRegistry _layouts;
     private readonly string _defaultLayoutName;
     private readonly IReadOnlyDictionary<string, double> _defaultLayoutParams;
+    private IReadOnlyList<CompiledBlacklistRule> _blacklist = [];
+    private bool _blacklistNeedsProcessName;
     private List<Monitor> _monitors = [];
 
     public WindowManager(LayoutRegistry layouts, string defaultLayoutName, IReadOnlyDictionary<string, double> defaultLayoutParams, int tagCount = 9)
@@ -91,28 +94,45 @@ internal sealed unsafe class WindowManager
     /// from every managed window, tiled and floating alike. See <see cref="SetHideTitlebars"/>.</summary>
     public bool HideTitlebars { get; private set; }
 
+    /// <summary>Global config-driven flag (general.rememberLayout): whether Program.cs should
+    /// save/restore window placement via WindowStateStore at startup/quit/reload. Off by default;
+    /// a plain flag with no side effects, same shape as <see cref="SetBlacklist"/>.</summary>
+    public bool RememberLayout { get; private set; }
+
     /// <summary>Fires after any state change any bar might need to redraw for (arrange, focus, tag switch).</summary>
     public event Action? Changed;
 
     public bool HasWindowsOnTag(int monitorIndex, int tagIndex) =>
         _windows.Exists(w => w.MonitorIndex == monitorIndex && (w.TagIndex == tagIndex || w.IsPinned));
 
-    /// <summary>Hides or shows the real Windows taskbar and reclaims/releases its space for
-    /// tiling. Called both by toggle-taskbar and, once at startup, to enforce
-    /// general.hideTaskbarOnStartup regardless of whatever state the taskbar happened to be left
-    /// in by a previous run.</summary>
-    public void SetTaskbarHidden(bool hidden)
+    /// <summary>Call once at startup, before the first Arrange(): if the real taskbar is already
+    /// hidden (e.g. a previous run hid it and exited before restoring it), recognize that instead
+    /// of defaulting to "shown" and leaving its reserved space unused.</summary>
+    public void SyncInitialTaskbarState() => IsTaskbarHidden = !TaskbarController.IsVisible();
+
+    public void ToggleTaskbar()
     {
-        IsTaskbarHidden = hidden;
-        TaskbarController.SetVisible(!hidden);
+        IsTaskbarHidden = !IsTaskbarHidden;
+        TaskbarController.SetVisible(!IsTaskbarHidden);
         Arrange();
     }
-
-    public void ToggleTaskbar() => SetTaskbarHidden(!IsTaskbarHidden);
 
     /// <summary>Applies (or lifts) title-bar hiding across every currently-tracked window --
     /// called from config load/reload with general.hideTitlebars, and with false at shutdown so
     /// windows get their decorations back even if Wtile exits while the flag was on.</summary>
+    /// <summary>Replaces the live set of blacklist rules (see WindowBlacklist). Only affects
+    /// windows opened after this call -- one already being managed is not retroactively released
+    /// (TryAdd, where the check runs, is a no-op for an already-tracked window). No lock needed:
+    /// WindowManager is only ever touched on the single WinEventHook pump thread, same reasoning
+    /// as SetHideTitlebars.</summary>
+    public void SetBlacklist(IReadOnlyList<CompiledBlacklistRule> rules)
+    {
+        _blacklist = rules;
+        _blacklistNeedsProcessName = rules.Any(r => r.ProcessName is not null);
+    }
+
+    public void SetRememberLayout(bool enabled) => RememberLayout = enabled;
+
     public void SetHideTitlebars(bool hidden)
     {
         HideTitlebars = hidden;
@@ -193,7 +213,145 @@ internal sealed unsafe class WindowManager
         return true;
     }
 
+    /// <summary>Snapshots which monitor/tag every currently-tracked window is on, for
+    /// WindowStateStore to write to state.json. Only called at quit/reload (see Program.cs/
+    /// ReloadCommand), so resolving each window's process name here (a syscall per window) is
+    /// cheap enough -- never done on the hot add/remove/arrange path.</summary>
+    public SavedState CaptureState()
+    {
+        var state = new SavedState();
+
+        for (int i = 0; i < _monitors.Count; i++)
+        {
+            Monitor monitor = _monitors[i];
+            state.Monitors.Add(new SavedMonitorState
+            {
+                Index = i,
+                ActiveTagIndex = monitor.ActiveTagIndex,
+                IsViewingAllTags = monitor.IsViewingAllTags,
+            });
+        }
+
+        foreach (ManagedWindow w in _windows)
+        {
+            WindowInspector.TryGetProcessName(w.Handle, out string processName);
+            state.Windows.Add(new SavedWindowState
+            {
+                ProcessName = processName,
+                ClassName = w.ClassName,
+                Title = w.Title,
+                MonitorIndex = w.MonitorIndex,
+                TagIndex = w.TagIndex,
+                IsFloating = w.IsFloating,
+                IsPinned = w.IsPinned,
+            });
+        }
+
+        return state;
+    }
+
+    /// <summary>Restores monitor/tag placement from a previously captured state (see
+    /// <see cref="CaptureState"/>), matching saved windows to currently-tracked live ones since
+    /// HWNDs aren't stable across a restart. Matching is best-effort by process name + window
+    /// class (title excluded -- it churns, e.g. browser tabs): saved windows are matched in saved
+    /// order, FIFO, against not-yet-claimed live windows; an unmatched saved record is dropped,
+    /// and a live window with no matching record just keeps whatever placement Seed()/TryAdd
+    /// already gave it. Called at startup and from ReloadCommand -- never on the hot path.</summary>
+    public void ApplySavedState(SavedState state)
+    {
+        foreach (SavedMonitorState saved in state.Monitors)
+        {
+            if (saved.Index < 0 || saved.Index >= _monitors.Count)
+                continue;
+            Monitor monitor = _monitors[saved.Index];
+            monitor.ActiveTagIndex = Math.Clamp(saved.ActiveTagIndex, 0, TagCount - 1);
+            monitor.IsViewingAllTags = saved.IsViewingAllTags;
+        }
+
+        var liveProcessNames = new Dictionary<HWND, string>();
+        foreach (ManagedWindow w in _windows)
+        {
+            WindowInspector.TryGetProcessName(w.Handle, out string processName);
+            liveProcessNames[w.Handle] = processName;
+        }
+
+        var claimed = new HashSet<HWND>();
+        var restored = new List<ManagedWindow>();
+        foreach (SavedWindowState saved in state.Windows)
+        {
+            if (string.IsNullOrEmpty(saved.ProcessName))
+                continue; // never matches -- avoids false positives between two access-denied windows
+
+            ManagedWindow? match = _windows.Find(w =>
+                !claimed.Contains(w.Handle) && w.ClassName == saved.ClassName && liveProcessNames[w.Handle] == saved.ProcessName);
+            if (match is null)
+                continue;
+
+            claimed.Add(match.Handle);
+            match.MonitorIndex = Math.Clamp(saved.MonitorIndex, 0, _monitors.Count - 1);
+            match.TagIndex = Math.Clamp(saved.TagIndex, 0, TagCount - 1);
+            match.IsFloating = saved.IsFloating;
+            match.IsPinned = saved.IsPinned;
+            restored.Add(match);
+        }
+
+        foreach (ManagedWindow w in _windows)
+        {
+            if (!claimed.Contains(w.Handle))
+                restored.Add(w);
+        }
+
+        _windows.Clear();
+        _windows.AddRange(restored);
+
+        ResyncVisibility();
+        Arrange();
+    }
+
+    /// <summary>Shows/hides every tracked window to match what IsVisibleOn now says for its
+    /// (possibly just-reassigned) monitor/tag -- Arrange() alone only repositions the tiled set,
+    /// it doesn't show/hide anything, and every window ApplySavedState touches was already
+    /// OS-visible (WindowFilter.IsManageable requires that). Same per-window show/hide + _selfHidden
+    /// bookkeeping ActivateTag already does, just generalized across every monitor at once.</summary>
+    private void ResyncVisibility()
+    {
+        foreach (ManagedWindow w in _windows)
+        {
+            Monitor monitor = _monitors[w.MonitorIndex];
+            if (IsVisibleOn(w, monitor, w.MonitorIndex))
+            {
+                _selfHidden.Remove(w.Handle);
+                PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+            }
+            else
+            {
+                _selfHidden.Add(w.Handle);
+                PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_HIDE);
+            }
+        }
+    }
+
     public void OnWindowShown(HWND hwnd) => TryAdd(hwnd, arrange: true);
+
+    private const nuint RearrangeTimerId = 1;
+
+    /// <summary>Schedules a one-shot re-arrange after delayMs, coalescing repeated calls (same
+    /// hWnd/id resets the pending timer rather than stacking). Used right after adding a window
+    /// via EVENT_OBJECT_UNCLOAKED (see WinEventTracker): that first Arrange() can race ahead of
+    /// the app settling its own geometry, or of DWM's extended-frame-bounds (used to compensate
+    /// for the invisible resize border, see GetInvisibleBorderInsets) catching up to the
+    /// just-uncloaked window -- observed as Firefox opening at the wrong size/position, spilling
+    /// under the bar, until something else (e.g. switching layouts) forces a fresh Arrange().
+    /// This follow-up corrects it automatically instead of requiring that manual nudge.</summary>
+    public void ScheduleRearrange(uint delayMs) =>
+        PInvoke.SetTimer(HWND.Null, RearrangeTimerId, delayMs, &RearrangeTimerProc);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static void RearrangeTimerProc(HWND hwnd, uint msg, nuint idEvent, uint dwTime)
+    {
+        PInvoke.KillTimer(HWND.Null, idEvent);
+        Current?.Arrange();
+    }
 
     public void OnWindowHidden(HWND hwnd)
     {
@@ -220,6 +378,23 @@ internal sealed unsafe class WindowManager
         Arrange();
     }
 
+    /// <summary>DWM can cloak a tracked window -- a virtual-desktop switch away from it, or (some
+    /// shell flyouts, like the clipboard-history/emoji panel opened via Win+V/Win+.) it being
+    /// dismissed -- without ever firing EVENT_OBJECT_HIDE or EVENT_OBJECT_DESTROY, since
+    /// IsWindowVisible stays true the whole time. Left unhandled, a cloaked window stays counted
+    /// as tiled forever: an invisible gap in the layout that nothing ever fills. Re-arranging here
+    /// makes TiledWindowsOn's IsCloaked check (which already excludes it) take effect immediately,
+    /// rather than waiting for some unrelated future Arrange() to happen to skip it. Deliberately
+    /// does NOT untrack the window (unlike OnWindowHidden/OnWindowDestroyed) -- a virtual-desktop
+    /// cloak is not a close, and EVENT_OBJECT_UNCLOAKED already re-surfaces it (via OnWindowShown)
+    /// with its placement intact when it uncloaks again.</summary>
+    public void OnWindowCloaked(HWND hwnd)
+    {
+        if (Find(hwnd) is not null)
+            Arrange();
+    }
+
+
     /// <summary>Windows to skip when tracking focus, e.g. Wtile's own bars (they can briefly
     /// report foreground on creation despite WS_EX_NOACTIVATE).</summary>
     public HashSet<HWND> IgnoredFocusHandles { get; } = [];
@@ -229,12 +404,12 @@ internal sealed unsafe class WindowManager
         if (IgnoredFocusHandles.Contains(hwnd))
             return;
 
-        // Some apps' main window becomes visible via a DWM "uncloak" rather than a fresh
-        // SW_SHOW (observed with Firefox) -- WinEventTracker only listens for EVENT_OBJECT_SHOW,
-        // so that transition never reaches TryAdd and the window is silently left untracked.
-        // EVENT_SYSTEM_FOREGROUND fires reliably regardless of how a window became visible, so
-        // give any not-yet-tracked window one more chance to be picked up right when it's
-        // actually used (subject to the same manageable-window filter as everything else).
+        // Belt-and-suspenders fallback for WinEventTracker's EVENT_OBJECT_UNCLOAKED handler
+        // (the correctly-timed fix for apps whose main window appears via a DWM "uncloak" rather
+        // than a fresh SW_SHOW, e.g. Firefox): if a window somehow still isn't tracked by the
+        // time it's focused, give it one more chance here rather than leaving it stuck forever
+        // (subject to the same manageable-window filter as everything else). Idempotent -- TryAdd
+        // is a no-op if EVENT_OBJECT_UNCLOAKED already picked it up, which is the common case.
         if (Find(hwnd) is null)
             TryAdd(hwnd, arrange: true);
 
@@ -422,17 +597,44 @@ internal sealed unsafe class WindowManager
             PInvoke.PostMessage(FocusedHandle, PInvoke.WM_CLOSE, 0, 0);
     }
 
+    /// <summary>Forcibly terminates the process owning the focused window (TerminateProcess) --
+    /// for a hung or non-cooperating window that ignores kill-window's WM_CLOSE (some shell
+    /// flyouts/system dialogs never process it at all). Destructive: unlike WM_CLOSE, the target
+    /// gets no chance to prompt or save, so it's a separate command/hotkey rather than folded into
+    /// kill-window itself.</summary>
+    public void ForceCloseFocusedWindow()
+    {
+        if (FocusedHandle.IsNull)
+            return;
+
+        PInvoke.GetWindowThreadProcessId(FocusedHandle, out uint pid);
+        if (pid == 0)
+            return;
+
+        HANDLE process = PInvoke.OpenProcess(PROCESS_ACCESS_RIGHTS.PROCESS_TERMINATE, false, pid);
+        if (process.IsNull)
+            return;
+        try
+        {
+            PInvoke.TerminateProcess(process, 1);
+        }
+        finally
+        {
+            PInvoke.CloseHandle(process);
+        }
+    }
+
     private List<ManagedWindow> TiledWindowsOnCurrentMonitor() => TiledWindowsOn(CurrentMonitor, CurrentMonitorIndex);
 
     private List<ManagedWindow> TiledWindowsOn(Monitor monitor, int monitorIndex) =>
-        _windows.FindAll(w => IsVisibleOn(w, monitor, monitorIndex) && !w.IsMinimized && !w.IsFloating);
+        _windows.FindAll(w => IsVisibleOn(w, monitor, monitorIndex) && !w.IsMinimized && !w.IsFloating && !WindowInspector.IsCloaked(w.Handle));
 
     /// <summary>True if this window is currently supposed to be visible on this specific monitor:
     /// on its active tag, pinned (bug.n's "pin" -- visible/tiled on every tag regardless of its
     /// own TagIndex, but not across monitors), or every tag is while
     /// <see cref="Monitor.IsViewingAllTags"/> (dwm's view(~0)). Pinned windows never cross
     /// monitors -- MonitorIndex must already match.</summary>
-    private static bool IsVisibleOn(ManagedWindow w, Monitor monitor, int monitorIndex) =>
+    internal static bool IsVisibleOn(ManagedWindow w, Monitor monitor, int monitorIndex) =>
         w.MonitorIndex == monitorIndex && (monitor.IsViewingAllTags || w.TagIndex == monitor.ActiveTagIndex || w.IsPinned);
 
     /// <summary>Pins/unpins the focused window so it stays visible across every tag switch on its
@@ -598,6 +800,16 @@ internal sealed unsafe class WindowManager
             return;
         }
 
+        if (_blacklist.Count > 0)
+        {
+            string processName = _blacklistNeedsProcessName && WindowInspector.TryGetProcessName(hwnd, out string name) ? name : "";
+            if (WindowBlacklist.IsBlacklisted(_blacklist, processName, snapshot.ClassName, snapshot.Title))
+            {
+                Console.WriteLine($"[blacklist] Skipped '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}')");
+                return;
+            }
+        }
+
         int monitorIndex = ResolveMonitorIndex(hwnd);
         Monitor monitor = _monitors[monitorIndex];
 
@@ -609,6 +821,7 @@ internal sealed unsafe class WindowManager
             TagIndex = monitor.ActiveTagIndex,
             OriginalStyle = WindowInspector.GetStyle(hwnd),
         };
+        Console.WriteLine($"[manage] '{window.Title}' (class='{window.ClassName}')");
         _windows.Insert(0, window); // dwm-style: a new window becomes master
         if (HideTitlebars && !IsTitlebarHideExempt(window.ClassName))
             WindowInspector.SetTitlebarHidden(hwnd, window.OriginalStyle, hidden: true);
@@ -669,10 +882,11 @@ internal sealed unsafe class WindowManager
         };
         IReadOnlyList<LayoutRect> rects = layout.Arrange(new LayoutContext(workArea, tiled.Count, activeTag.LayoutParams));
 
-        HDWP hdwp = PInvoke.BeginDeferWindowPos(tiled.Count);
+        bool anyFailed = false;
         for (int i = 0; i < tiled.Count; i++)
         {
-            HWND handle = tiled[i].Handle;
+            ManagedWindow window = tiled[i];
+            HWND handle = window.Handle;
             LayoutRect r = rects[i];
 
             // Some apps ignore SetWindowPos while maximized; clear that state first.
@@ -682,11 +896,34 @@ internal sealed unsafe class WindowManager
             // Compensate for the invisible resize border (see GetInvisibleBorderInsets) so the
             // window's *visible* bounds match the layout rect exactly, not its outer window rect.
             (int insetLeft, int insetTop, int insetRight, int insetBottom) = WindowInspector.GetInvisibleBorderInsets(handle);
-            hdwp = PInvoke.DeferWindowPos(
-                hdwp, handle, HWND.Null,
+            bool moved = PInvoke.SetWindowPos(
+                handle, HWND.Null,
                 r.X - insetLeft, r.Y - insetTop, r.Width + insetLeft + insetRight, r.Height + insetTop + insetBottom,
                 SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER);
+
+            if (!moved)
+            {
+                // Most commonly an elevated window: Wtile (running non-elevated) isn't allowed to
+                // reposition a higher-integrity-level window (UIPI). Left tiled, it would
+                // permanently occupy a slot in the layout it can never actually be moved into --
+                // an invisible gap warping every other window's rect around it forever. Float it
+                // instead: TiledWindowsOn excludes floating windows, so it stops being counted
+                // (its own on-screen rect is simply left wherever it already was).
+                Console.WriteLine($"[arrange] Failed to reposition '{window.Title}' (class='{window.ClassName}') -- "
+                    + "likely running elevated; run Wtile as Administrator to tile elevated windows too. Floating it instead.");
+                window.IsFloating = true;
+                anyFailed = true;
+            }
         }
-        PInvoke.EndDeferWindowPos(hdwp);
+
+        // Previously used BeginDeferWindowPos/DeferWindowPos/EndDeferWindowPos to move every
+        // tiled window as one atomic, flicker-free batch -- but a single DeferWindowPos failure
+        // (see above) invalidates the whole batch handle for the rest of the loop with
+        // undocumented partial-failure semantics, silently leaving every window after the failure
+        // un-arranged. Plain per-window SetWindowPos isolates one window's failure from the rest,
+        // and DWM's own compositing already avoids visible tearing between separate calls on
+        // modern Windows, so the batching bought little here for what it cost in fragility.
+        if (anyFailed)
+            ArrangeMonitor(monitorIndex); // recompute without the now-floating window(s) taking a slot
     }
 }

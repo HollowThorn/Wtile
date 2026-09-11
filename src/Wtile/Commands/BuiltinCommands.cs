@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Windows.Win32;
+using Windows.Win32.Foundation;
 using Wtile.Bar;
 using Wtile.Config;
 using Wtile.Core;
@@ -88,6 +89,15 @@ internal sealed class KillWindowCommand(WindowManager manager) : ICommand
 {
     public string Name => "kill-window";
     public void Execute(IReadOnlyList<string> args) => manager.CloseFocusedWindow();
+}
+
+/// <summary>Forcibly terminates the focused window's process -- for something kill-window's polite
+/// WM_CLOSE doesn't budge (a hung app, or a system flyout/dialog that never processes WM_CLOSE at
+/// all). Destructive: no save prompt, no chance for the app to object.</summary>
+internal sealed class ForceKillWindowCommand(WindowManager manager) : ICommand
+{
+    public string Name => "force-kill-window";
+    public void Execute(IReadOnlyList<string> args) => manager.ForceCloseFocusedWindow();
 }
 
 /// <summary>Nudges the active tag's master-area window count. Args: <c>["&lt;signed delta, e.g. +1&gt;"]</c>.</summary>
@@ -235,6 +245,21 @@ internal sealed class ToggleTaskbarCommand(WindowManager manager) : ICommand
     public void Execute(IReadOnlyList<string> args) => manager.ToggleTaskbar();
 }
 
+/// <summary>Prints the focused window's process/class/title to the console -- lets you copy exact
+/// values straight into a blacklist: rule instead of guessing or reaching for Spy++.</summary>
+internal sealed class InspectWindowCommand : ICommand
+{
+    public string Name => "inspect-window";
+
+    public void Execute(IReadOnlyList<string> args)
+    {
+        HWND hwnd = PInvoke.GetForegroundWindow();
+        WindowSnapshot snapshot = WindowInspector.Describe(hwnd);
+        WindowInspector.TryGetProcessName(hwnd, out string processName);
+        Console.WriteLine($"[inspect] process='{processName}' class='{snapshot.ClassName}' title='{snapshot.Title}'");
+    }
+}
+
 /// <summary>
 /// Re-reads config.yaml from disk and applies it (tags/colors/hotkeys/layout params/bar
 /// segments), then unconditionally refreshes the bar's screen geometry and re-arranges --
@@ -243,18 +268,27 @@ internal sealed class ToggleTaskbarCommand(WindowManager manager) : ICommand
 /// Program.cs (not CreateDefault below) since it needs the BarWindow/ConfigApplier, which are
 /// constructed after the initial CommandRegistry.
 /// </summary>
-internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IReadOnlyList<BarWindow> bars) : ICommand
+internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IReadOnlyList<BarWindow> bars, WindowManager manager, string statePath) : ICommand
 {
     public string Name => "reload";
 
     public void Execute(IReadOnlyList<string> args)
     {
+        // Save with the pre-reload RememberLayout value, before config (which may flip it) is
+        // even read -- see WindowManager.RememberLayout / ApplySavedState.
+        if (manager.RememberLayout)
+            WindowStateStore.Save(statePath, manager.CaptureState());
+
         ConfigLoadResult result = ConfigLoader.LoadFromFile(configPath);
         foreach (string warning in result.Warnings)
             Console.WriteLine($"[config] warning: {warning}");
         applier.Apply(result.Config);
         foreach (BarWindow bar in bars)
             bar.RefreshGeometry();
+
+        if (manager.RememberLayout && WindowStateStore.TryLoad(statePath, out SavedState state))
+            manager.ApplySavedState(state);
+
         Console.WriteLine("[reload] Done.");
     }
 }
@@ -283,9 +317,11 @@ internal static class BuiltinCommands
         registry.Register(new FocusMonitorCommand(manager));
         registry.Register(new MoveWindowToMonitorCommand(manager));
         registry.Register(new KillWindowCommand(manager));
+        registry.Register(new ForceKillWindowCommand(manager));
         registry.Register(new SpawnCommand());
         registry.Register(new QuitCommand());
         registry.Register(new ToggleTaskbarCommand(manager));
+        registry.Register(new InspectWindowCommand());
         return registry;
     }
 }

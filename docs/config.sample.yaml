@@ -9,30 +9,51 @@ general:
   focusFollowsMouse: false
   borderGap: 0
   # Layout every tag on every monitor starts on: master-stack, master-stack-right, monocle,
-  # centered-master, vertical, or deck (see layouts: below). Its nmaster/mfact/gap still come
-  # from the "master-stack" entry below regardless of which of these is picked -- per-tag/monitor
-  # layout config isn't supported yet, just the starting layout name.
+  # centered-master, or vertical (see layouts: below). Its nmaster/mfact/gap still come from the
+  # "master-stack" entry below regardless of which of these is picked -- per-tag/monitor layout
+  # config isn't supported yet, just the starting layout name.
   defaultLayout: master-stack
   # Strips the title bar and resize border from every managed window (tiled and floating alike).
   # Original styles are remembered per-window and restored on quit (or if you flip this back off
   # + reload), so this is safe to toggle without leaving windows permanently borderless.
   hideTitlebars: false
-  # Hides the real Windows taskbar as soon as Wtile starts, same as pressing toggle-taskbar
-  # (Win+Space by default) right after launch. Only applies at startup, not on reload.
-  hideTaskbarOnStartup: false
+  # Colored border (dwm/mango-style) around whichever managed window currently has focus, drawn
+  # flush against the window's own visible edge (not in the gap, so it works the same whether
+  # borderGap/layout gap is 0 or not). 0 disables it entirely.
+  focusedBorderWidth: 2
+  focusedBorderColor: "#89b4fa"
+  # Opt-in: remembers which monitor/tag each window was on (state.json, next to this config file),
+  # and restores it on startup and on "reload", matching saved windows to newly-opened ones by
+  # process name + window class (title isn't used -- it churns too much, e.g. browser tabs). Off
+  # by default.
+  rememberLayout: false
+
+# blacklist: exclude specific windows from tiling entirely, matched by regex against the
+# window's process name, window class name, and/or title (case-insensitive, unanchored -- add
+# ^/$ yourself to anchor). Within one rule, only the fields you set are checked (all set fields
+# must match); a window is excluded if ANY rule matches. A rule left completely blank would match
+# every window and is rejected with a warning instead. Only affects windows opened after the next
+# "reload" -- it won't retroactively untile something already being managed.
+#
+# Common shell popups (the volume/brightness OSD, etc.) are already excluded automatically and
+# don't need an entry here -- this is for anything else you want to keep floating/untiled. Use
+# the "inspect-window" hotkey (Win+Shift+I below) to print the focused window's exact process/
+# class/title so you don't have to guess. Example:
+# blacklist:
+#   - processName: "^steam\\.exe$"
+#     title: "Friends List"
+#   - className: "^#32770$"       # generic Windows dialog box class
 
 layouts:
   # Every tag starts on master-stack with these params (see hotkeys --- layout --- below for how
   # per-tag values then diverge, including gap via adjust-gap/toggle-gap). "master-stack-right"
   # (master column on the right, "=[]"), "monocle" ("[M]", every window fullscreen, only the
   # focused one visible), "centered-master" ("|M|", master centered with stack windows
-  # alternating left/right of it), "vertical" ("=", every window a full-width row, no master), and
-  # "deck" ("[D]", master area same as master-stack but every stack window shares the same rect,
-  # like monocle confined to just the stack area) are also registered and selectable via
-  # set-layout (Win+T / Win+M / Win+W / Win+Shift+V / Win+Shift+D below) -- they don't need their
-  # own entry here: master-stack-right, centered-master, and deck reuse whichever nmaster/mfact/
-  # gap the tag already has (same params, just arranged differently), monocle ignores those
-  # params entirely, and vertical only looks at gap.
+  # alternating left/right of it), and "vertical" ("=", every window a full-width row, no master)
+  # are also registered and selectable via set-layout (Win+T / Win+M / Win+W / Win+Shift+V below)
+  # -- they don't need their own entry here: master-stack-right and centered-master reuse
+  # whichever nmaster/mfact/gap the tag already has (same params, just arranged differently),
+  # monocle ignores those params entirely, and vertical only looks at gap.
   - name: master-stack
     symbol: "[]="
     nmaster: 1
@@ -86,6 +107,14 @@ hotkeys:
   # hardcoded to lock the workstation, below even our low-level keyboard hook, same as
   # Ctrl+Alt+Delete). Bare Win+<key> combos besides Win+L DO work here (via a low-level keyboard
   # hook, not RegisterHotKey -- see Hotkeys/HotkeyManager.cs for why that matters on Windows).
+  #
+  # Win+G is a similar practical exception, though not hardcoded the same way as Win+L: if Xbox
+  # Game Bar's own Win+G capture is enabled (Settings > Gaming > Xbox Game Bar, or the
+  # HKCU\System\GameConfigStore\GameDVR_Enabled registry value), it intercepts Win+G through a
+  # separate input path Game Bar installs for itself -- specifically so it still works inside
+  # full-screen games that block normal hooks -- so it can open Game Bar even when Win+G is bound
+  # to something else here. Binding it below still works (both fire), but if you don't want Game
+  # Bar popping up too, disable that Xbox Game Bar setting rather than trying to out-hook it.
 
   # --- spawn ---
   - keys: "Win+Shift+T"
@@ -105,7 +134,9 @@ hotkeys:
   - keys: "Win+X"
     command: swap-master           # swaps the focused window with master
   - keys: "Win+Q"
-    command: kill-window
+    command: kill-window        # polite WM_CLOSE -- a well-behaved app gets to prompt/save first
+  - keys: "Win+Ctrl+Q"          # forcibly terminates the process -- no save prompt, for something
+    command: force-kill-window  # that ignores WM_CLOSE entirely (a hang, or a system flyout/dialog)
   - keys: "Win+G"
     command: toggle-floating
 
@@ -140,9 +171,6 @@ hotkeys:
   - keys: "Win+Shift+V"
     command: set-layout            # every window gets a full-width row, stacked top to bottom
     args: ["vertical"]
-  - keys: "Win+Shift+D"
-    command: set-layout            # master area same as master-stack, but every stack window
-    args: ["deck"]                 # shares the same rect (like monocle, confined to the stack area)
 
   # Gap controls: plain Win+= toggles, both adjustments take Shift.
   - keys: "Win+Shift+-"
@@ -247,6 +275,10 @@ hotkeys:
   - keys: "Win+Space"              # hides the real Windows taskbar entirely (not Windows' own
     command: toggle-taskbar        # auto-hide, which still peeks out on mouse-hover at the edge)
                                     # and reclaims its space for tiling.
+
+  # --- debug ---
+  - keys: "Win+Shift+I"            # prints the focused window's process/class/title to the
+    command: inspect-window        # console -- use it to find values for a blacklist: rule above
 
   # --- session ---
   - keys: "Win+Shift+Q"

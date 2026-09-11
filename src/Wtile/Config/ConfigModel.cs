@@ -10,6 +10,7 @@ public sealed class WtileConfig
     public List<LayoutConfig> Layouts { get; set; } = [];
     public BarConfig Bar { get; set; } = new();
     public List<HotkeyBinding> Hotkeys { get; set; } = [];
+    public List<BlacklistRule> Blacklist { get; set; } = [];
 }
 
 public sealed class GeneralConfig
@@ -32,12 +33,18 @@ public sealed class GeneralConfig
     /// gives windows their normal decorations back.</summary>
     public bool HideTitlebars { get; set; } = false;
 
-    /// <summary>Hides the real Windows taskbar as soon as Wtile starts, same as pressing
-    /// toggle-taskbar (Win+Space by default) manually right after launch. Enforced once at
-    /// startup regardless of whatever state the taskbar was left in by a previous run -- not
-    /// reapplied on "reload", since that would fight the toggle-taskbar hotkey during a live
-    /// session.</summary>
-    public bool HideTaskbarOnStartup { get; set; } = false;
+    /// <summary>Width in px of the colored border drawn around whichever managed window currently
+    /// has focus (dwm/mango-style). 0 disables it entirely.</summary>
+    public int FocusedBorderWidth { get; set; } = 2;
+
+    /// <summary>Color of the focused-window border, as "#RRGGBB". Ignored if FocusedBorderWidth is 0.</summary>
+    public string FocusedBorderColor { get; set; } = "#89b4fa";
+
+    /// <summary>Opt-in: on startup and on "reload", restores which monitor/tag each window was on
+    /// last time (matched to newly-opened windows by process name + window class), and saves that
+    /// placement to state.json on quit/reload. Off by default since it's new automatic-placement
+    /// behavior a user hasn't asked for yet.</summary>
+    public bool RememberLayout { get; set; } = false;
 }
 
 public sealed class LayoutConfig
@@ -101,4 +108,16 @@ public sealed class HotkeyBinding
     public string Keys { get; set; } = "";
     public string Command { get; set; } = "";
     public List<string> Args { get; set; } = [];
+}
+
+/// <summary>One window-exclusion rule: a window is blacklisted (never managed/tiled) if every
+/// non-blank field here matches it as a regex (AND within a rule); the blacklist as a whole
+/// excludes a window if any rule matches (OR across rules). A blank field means "don't constrain
+/// on this field" -- a rule where every field is blank would match every window and is rejected
+/// at load time (see ConfigLoader.Validate) rather than silently blacklisting everything.</summary>
+public sealed class BlacklistRule
+{
+    public string ProcessName { get; set; } = "";
+    public string ClassName { get; set; } = "";
+    public string Title { get; set; } = "";
 }

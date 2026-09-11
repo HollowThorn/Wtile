@@ -18,6 +18,15 @@ using Wtile.Core;
 using Wtile.Hotkeys;
 using Wtile.Layouts;
 
+// Checked before anything else (no hooks/COM/windows touched yet) so `-v`/`--version` is a cheap,
+// side-effect-free way to prove which build an exe at some install path actually is -- see
+// GenerateBuildInfo in Wtile.csproj for how GitCommit/BuildTimeUtc get embedded at build time.
+if (args is ["-v" or "--version"])
+{
+    Console.WriteLine($"Wtile {Wtile.BuildInfo.GitCommit} (built {Wtile.BuildInfo.BuildTimeUtc} UTC)");
+    return;
+}
+
 Console.WriteLine("Wtile starting...");
 
 // COM must be initialized on this thread before any IMMDeviceEnumerator/IAudioEndpointVolume use
@@ -26,6 +35,7 @@ unsafe { PInvoke.CoInitializeEx(null, COINIT.COINIT_APARTMENTTHREADED); }
 
 string configDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Wtile");
 string configPath = Path.Combine(configDir, "config.yaml");
+string statePath = Path.Combine(configDir, "state.json");
 Directory.CreateDirectory(configDir);
 if (!File.Exists(configPath))
 {
@@ -49,8 +59,10 @@ var defaultLayoutParams = new Dictionary<string, double>
 LayoutRegistry layouts = LayoutRegistry.CreateDefault();
 var manager = new WindowManager(layouts, initial.Config.General.DefaultLayout, defaultLayoutParams, initial.Config.General.TagCount);
 manager.InitializeMonitors();
-manager.SetTaskbarHidden(initial.Config.General.HideTaskbarOnStartup);
+manager.SyncInitialTaskbarState(); // before BarWindow/Arrange: recognize an already-hidden taskbar from a previous run
 manager.SetHideTitlebars(initial.Config.General.HideTitlebars);
+manager.SetBlacklist(BlacklistCompiler.Compile(initial.Config.Blacklist));
+manager.SetRememberLayout(initial.Config.General.RememberLayout);
 CommandRegistry commands = BuiltinCommands.CreateDefault(manager);
 using var tracker = new WinEventTracker();
 
@@ -60,13 +72,17 @@ var bars = new List<BarWindow>();
 for (int i = 0; i < manager.Monitors.Count; i++)
     bars.Add(new BarWindow(manager, commands, initial.Config.Bar, manager.Monitors[i], i));
 
+using var focusBorder = new FocusBorderWindow(manager, initial.Config.General.FocusedBorderWidth, initial.Config.General.FocusedBorderColor);
+
 using var hotkeys = new HotkeyManager(commands);
 hotkeys.ApplyBindings(initial.Config.Hotkeys);
 
-var applier = new ConfigApplier(manager, bars, hotkeys);
-commands.Register(new ReloadCommand(configPath, applier, bars));
+var applier = new ConfigApplier(manager, bars, hotkeys, focusBorder);
+commands.Register(new ReloadCommand(configPath, applier, bars, manager, statePath));
 
 manager.Seed();
+if (manager.RememberLayout && WindowStateStore.TryLoad(statePath, out SavedState savedState))
+    manager.ApplySavedState(savedState);
 manager.OnForegroundChanged(PInvoke.GetForegroundWindow()); // seed initial title; the hook only fires on subsequent changes
 Console.WriteLine($"Tracking {manager.Windows.Count} window(s). Config: {configPath}. Waiting for events...");
 
@@ -78,6 +94,9 @@ while (true)
     PInvoke.TranslateMessage(msg);
     PInvoke.DispatchMessage(msg);
 }
+
+if (manager.RememberLayout)
+    WindowStateStore.Save(statePath, manager.CaptureState());
 
 manager.SetHideTitlebars(false); // give windows their decorations back before we stop managing them
 

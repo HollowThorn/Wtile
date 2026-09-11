@@ -45,8 +45,29 @@ internal sealed unsafe class WinEventTracker : IDisposable
             case PInvoke.EVENT_OBJECT_SHOW:
                 target.OnWindowShown(hwnd);
                 break;
+            case PInvoke.EVENT_OBJECT_UNCLOAKED:
+                // Some apps' main window becomes visible via a DWM "uncloak" rather than a fresh
+                // SW_SHOW (observed with Firefox) -- EVENT_OBJECT_SHOW never fires for that
+                // transition. This is the correctly-timed fix (see OnForegroundChanged for the
+                // looser, focus-triggered fallback this complements -- that one can race ahead of
+                // the actual uncloak and miss a still-cloaked window).
+                target.OnWindowShown(hwnd);
+                // The immediate arrange above can still land at the wrong size/position -- right
+                // at uncloak, DWM's extended-frame-bounds for this window (used to compensate for
+                // its invisible resize border) or the app's own post-show geometry may not have
+                // settled yet. A short follow-up re-arrange self-corrects it (see
+                // WindowManager.ScheduleRearrange) instead of leaving it wrong until something
+                // else happens to trigger another arrange.
+                target.ScheduleRearrange(150);
+                break;
             case PInvoke.EVENT_OBJECT_HIDE:
                 target.OnWindowHidden(hwnd);
+                break;
+            case PInvoke.EVENT_OBJECT_CLOAKED:
+                // The reverse of EVENT_OBJECT_UNCLOAKED above: DWM hid this window without a
+                // Win32-level hide (virtual-desktop switch, or a shell flyout dismissed without
+                // being destroyed) -- see WindowManager.OnWindowCloaked.
+                target.OnWindowCloaked(hwnd);
                 break;
             case PInvoke.EVENT_OBJECT_DESTROY:
                 target.OnWindowDestroyed(hwnd);

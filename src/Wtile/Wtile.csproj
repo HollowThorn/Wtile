@@ -28,4 +28,54 @@
     <EmbeddedResource Include="..\..\docs\config.sample.yaml" LogicalName="Wtile.default-config.yaml" />
   </ItemGroup>
 
+  <!-- Embeds the current git commit plus a real build timestamp into the binary itself, so
+       `Wtile.exe -v` can prove which source state a running/installed exe actually came from:
+       config reload can't tell you that, and a stale copy at some other install path silently
+       behaving like an old build is exactly the bug this exists to catch early next time. Runs on
+       every build (no Inputs/Outputs; deliberately never treated as up-to-date) so BuildTimeUtc is
+       always the real build time, not a cached one. Degrades to "unknown" rather than failing the
+       build if git isn't on PATH. -->
+  <Target Name="GenerateBuildInfo" BeforeTargets="CoreCompile">
+    <Exec Command="git rev-parse --short HEAD" WorkingDirectory="$(MSBuildProjectDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" ContinueOnError="WarnAndContinue">
+      <Output TaskParameter="ConsoleOutput" PropertyName="WtileGitCommit" />
+    </Exec>
+    <Exec Command="git status --porcelain" WorkingDirectory="$(MSBuildProjectDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" ContinueOnError="WarnAndContinue">
+      <Output TaskParameter="ConsoleOutput" PropertyName="WtileGitDirty" />
+    </Exec>
+    <PropertyGroup>
+      <WtileGitCommit Condition="'$(WtileGitCommit)' == ''">unknown</WtileGitCommit>
+      <WtileGitDirty Condition="'$(WtileGitDirty)' != ''">-dirty</WtileGitDirty>
+      <WtileBuildTimeUtc>$([System.DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm:ss"))</WtileBuildTimeUtc>
+      <WtileBuildInfoFile>$(IntermediateOutputPath)BuildInfo.g.cs</WtileBuildInfoFile>
+    </PropertyGroup>
+    <ItemGroup>
+      <WtileBuildInfoLines Include="namespace Wtile%3B" />
+      <WtileBuildInfoLines Include="internal static class BuildInfo" />
+      <WtileBuildInfoLines Include="{" />
+      <WtileBuildInfoLines Include="    public const string GitCommit = &quot;$(WtileGitCommit)$(WtileGitDirty)&quot;%3B" />
+      <WtileBuildInfoLines Include="    public const string BuildTimeUtc = &quot;$(WtileBuildTimeUtc)&quot;%3B" />
+      <WtileBuildInfoLines Include="}" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(WtileBuildInfoFile)" Lines="@(WtileBuildInfoLines)" Overwrite="true" />
+    <ItemGroup>
+      <Compile Include="$(WtileBuildInfoFile)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Copies the just-published exe over the real install (the one actually on PATH, see
+       BuildInfo/-v above) so "publish" and "the copy you actually run" can't silently drift apart
+       again. $(LOCALAPPDATA) makes this resolve per-user rather than baking in one account's path.
+       Non-fatal if Wtile.exe is currently running and the file is locked: warns instead, since
+       failing the whole publish over that would be more annoying than helpful. -->
+  <Target Name="DeployToLocalPrograms" AfterTargets="Publish">
+    <PropertyGroup>
+      <WtileInstallDir>$(LOCALAPPDATA)\Programs\Wtile\</WtileInstallDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(WtileInstallDir)" Condition="!Exists('$(WtileInstallDir)')" />
+    <Copy SourceFiles="$(PublishDir)Wtile.exe" DestinationFolder="$(WtileInstallDir)" ContinueOnError="WarnAndContinue" />
+    <Warning Condition="'$(MSBuildLastTaskResult)' == 'false'"
+             Text="Could not copy Wtile.exe to $(WtileInstallDir) -- is it currently running? Quit it (Win+Shift+Q) and publish again." />
+    <Message Condition="'$(MSBuildLastTaskResult)' == 'true'" Importance="high" Text="Deployed to $(WtileInstallDir)Wtile.exe" />
+  </Target>
+
 </Project>

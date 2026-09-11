@@ -108,6 +108,17 @@ public class ConfigLoaderTests
     }
 
     [Fact]
+    public void NegativeFocusedBorderWidth_ClampedToZeroWithWarning()
+    {
+        const string yaml = "general:\n  focusedBorderWidth: -2\n";
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Equal(0, result.Config.General.FocusedBorderWidth);
+        Assert.Contains(result.Warnings, w => w.Contains("focusedBorderWidth"));
+    }
+
+    [Fact]
     public void InvalidBarPosition_DefaultsToTopWithWarning()
     {
         const string yaml = "bar:\n  position: sideways\n";
@@ -148,6 +159,51 @@ public class ConfigLoaderTests
 
         Assert.Empty(result.Config.Hotkeys);
         Assert.Contains(result.Warnings, w => w.Contains("no command"));
+    }
+
+    [Fact]
+    public void ParsesBlacklistSection()
+    {
+        const string yaml = """
+            blacklist:
+              - processName: "^steam\\.exe$"
+                title: "Friends"
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Warnings);
+        BlacklistRule rule = Assert.Single(result.Config.Blacklist);
+        Assert.Equal("^steam\\.exe$", rule.ProcessName);
+        Assert.Equal("Friends", rule.Title);
+    }
+
+    [Fact]
+    public void InvalidBlacklistRegex_IsDroppedWithWarning()
+    {
+        const string yaml = """
+            blacklist:
+              - className: "("
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Config.Blacklist);
+        Assert.Contains(result.Warnings, w => w.Contains("className"));
+    }
+
+    [Fact]
+    public void AllBlankBlacklistRule_IsDroppedWithWarning()
+    {
+        const string yaml = """
+            blacklist:
+              - processName: ""
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Config.Blacklist);
+        Assert.Contains(result.Warnings, w => w.Contains("would match every window"));
     }
 
     [Fact]

@@ -4,7 +4,7 @@ namespace Wtile.Layouts;
 /// Master-stack tiling: the first <c>nmaster</c> windows occupy a resizable master area (width =
 /// <c>mfact</c> * work-area width), and any remaining windows occupy a stack area, stacked
 /// vertically. Within the master area, windows sit side by side as columns (bug.n-style) rather
-/// than stacked in rows like dwm -- e.g. 3 windows with nmaster=2 renders as three vertical
+/// than stacked in rows like dwm/mango -- e.g. 3 windows with nmaster=2 renders as three vertical
 /// strips: one stack column plus two master columns. With a single window, or when
 /// <c>nmaster</c> covers every window, there's no separate stack area and every window becomes a
 /// master column sharing the full width. <paramref name="masterOnRight"/> mirrors which side the
