@@ -93,6 +93,11 @@ internal sealed unsafe class WindowManager
     /// from every managed window, tiled and floating alike. See <see cref="SetHideTitlebars"/>.</summary>
     public bool HideTitlebars { get; private set; }
 
+    /// <summary>Global config-driven flag (general.rememberLayout): whether Program.cs should
+    /// save/restore window placement via WindowStateStore at startup/quit/reload. Off by default;
+    /// a plain flag with no side effects, same shape as <see cref="SetBlacklist"/>.</summary>
+    public bool RememberLayout { get; private set; }
+
     /// <summary>Fires after any state change any bar might need to redraw for (arrange, focus, tag switch).</summary>
     public event Action? Changed;
 
@@ -124,6 +129,8 @@ internal sealed unsafe class WindowManager
         _blacklist = rules;
         _blacklistNeedsProcessName = rules.Any(r => r.ProcessName is not null);
     }
+
+    public void SetRememberLayout(bool enabled) => RememberLayout = enabled;
 
     public void SetHideTitlebars(bool hidden)
     {
@@ -203,6 +210,124 @@ internal sealed unsafe class WindowManager
     {
         Current?.TryAdd(hwnd, arrange: false);
         return true;
+    }
+
+    /// <summary>Snapshots which monitor/tag every currently-tracked window is on, for
+    /// WindowStateStore to write to state.json. Only called at quit/reload (see Program.cs/
+    /// ReloadCommand), so resolving each window's process name here (a syscall per window) is
+    /// cheap enough -- never done on the hot add/remove/arrange path.</summary>
+    public SavedState CaptureState()
+    {
+        var state = new SavedState();
+
+        for (int i = 0; i < _monitors.Count; i++)
+        {
+            Monitor monitor = _monitors[i];
+            state.Monitors.Add(new SavedMonitorState
+            {
+                Index = i,
+                ActiveTagIndex = monitor.ActiveTagIndex,
+                IsViewingAllTags = monitor.IsViewingAllTags,
+            });
+        }
+
+        foreach (ManagedWindow w in _windows)
+        {
+            WindowInspector.TryGetProcessName(w.Handle, out string processName);
+            state.Windows.Add(new SavedWindowState
+            {
+                ProcessName = processName,
+                ClassName = w.ClassName,
+                Title = w.Title,
+                MonitorIndex = w.MonitorIndex,
+                TagIndex = w.TagIndex,
+                IsFloating = w.IsFloating,
+                IsPinned = w.IsPinned,
+            });
+        }
+
+        return state;
+    }
+
+    /// <summary>Restores monitor/tag placement from a previously captured state (see
+    /// <see cref="CaptureState"/>), matching saved windows to currently-tracked live ones since
+    /// HWNDs aren't stable across a restart. Matching is best-effort by process name + window
+    /// class (title excluded -- it churns, e.g. browser tabs): saved windows are matched in saved
+    /// order, FIFO, against not-yet-claimed live windows; an unmatched saved record is dropped,
+    /// and a live window with no matching record just keeps whatever placement Seed()/TryAdd
+    /// already gave it. Called at startup and from ReloadCommand -- never on the hot path.</summary>
+    public void ApplySavedState(SavedState state)
+    {
+        foreach (SavedMonitorState saved in state.Monitors)
+        {
+            if (saved.Index < 0 || saved.Index >= _monitors.Count)
+                continue;
+            Monitor monitor = _monitors[saved.Index];
+            monitor.ActiveTagIndex = Math.Clamp(saved.ActiveTagIndex, 0, TagCount - 1);
+            monitor.IsViewingAllTags = saved.IsViewingAllTags;
+        }
+
+        var liveProcessNames = new Dictionary<HWND, string>();
+        foreach (ManagedWindow w in _windows)
+        {
+            WindowInspector.TryGetProcessName(w.Handle, out string processName);
+            liveProcessNames[w.Handle] = processName;
+        }
+
+        var claimed = new HashSet<HWND>();
+        var restored = new List<ManagedWindow>();
+        foreach (SavedWindowState saved in state.Windows)
+        {
+            if (string.IsNullOrEmpty(saved.ProcessName))
+                continue; // never matches -- avoids false positives between two access-denied windows
+
+            ManagedWindow? match = _windows.Find(w =>
+                !claimed.Contains(w.Handle) && w.ClassName == saved.ClassName && liveProcessNames[w.Handle] == saved.ProcessName);
+            if (match is null)
+                continue;
+
+            claimed.Add(match.Handle);
+            match.MonitorIndex = Math.Clamp(saved.MonitorIndex, 0, _monitors.Count - 1);
+            match.TagIndex = Math.Clamp(saved.TagIndex, 0, TagCount - 1);
+            match.IsFloating = saved.IsFloating;
+            match.IsPinned = saved.IsPinned;
+            restored.Add(match);
+        }
+
+        foreach (ManagedWindow w in _windows)
+        {
+            if (!claimed.Contains(w.Handle))
+                restored.Add(w);
+        }
+
+        _windows.Clear();
+        _windows.AddRange(restored);
+
+        ResyncVisibility();
+        Arrange();
+    }
+
+    /// <summary>Shows/hides every tracked window to match what IsVisibleOn now says for its
+    /// (possibly just-reassigned) monitor/tag -- Arrange() alone only repositions the tiled set,
+    /// it doesn't show/hide anything, and every window ApplySavedState touches was already
+    /// OS-visible (WindowFilter.IsManageable requires that). Same per-window show/hide + _selfHidden
+    /// bookkeeping ActivateTag already does, just generalized across every monitor at once.</summary>
+    private void ResyncVisibility()
+    {
+        foreach (ManagedWindow w in _windows)
+        {
+            Monitor monitor = _monitors[w.MonitorIndex];
+            if (IsVisibleOn(w, monitor, w.MonitorIndex))
+            {
+                _selfHidden.Remove(w.Handle);
+                PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+            }
+            else
+            {
+                _selfHidden.Add(w.Handle);
+                PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_HIDE);
+            }
+        }
     }
 
     public void OnWindowShown(HWND hwnd) => TryAdd(hwnd, arrange: true);

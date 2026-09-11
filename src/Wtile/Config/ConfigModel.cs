@@ -39,6 +39,12 @@ public sealed class GeneralConfig
 
     /// <summary>Color of the focused-window border, as "#RRGGBB". Ignored if FocusedBorderWidth is 0.</summary>
     public string FocusedBorderColor { get; set; } = "#89b4fa";
+
+    /// <summary>Opt-in: on startup and on "reload", restores which monitor/tag each window was on
+    /// last time (matched to newly-opened windows by process name + window class), and saves that
+    /// placement to state.json on quit/reload. Off by default since it's new automatic-placement
+    /// behavior a user hasn't asked for yet.</summary>
+    public bool RememberLayout { get; set; } = false;
 }
 
 public sealed class LayoutConfig

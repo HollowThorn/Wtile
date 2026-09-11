@@ -259,18 +259,27 @@ internal sealed class InspectWindowCommand : ICommand
 /// Program.cs (not CreateDefault below) since it needs the BarWindow/ConfigApplier, which are
 /// constructed after the initial CommandRegistry.
 /// </summary>
-internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IReadOnlyList<BarWindow> bars) : ICommand
+internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IReadOnlyList<BarWindow> bars, WindowManager manager, string statePath) : ICommand
 {
     public string Name => "reload";
 
     public void Execute(IReadOnlyList<string> args)
     {
+        // Save with the pre-reload RememberLayout value, before config (which may flip it) is
+        // even read -- see WindowManager.RememberLayout / ApplySavedState.
+        if (manager.RememberLayout)
+            WindowStateStore.Save(statePath, manager.CaptureState());
+
         ConfigLoadResult result = ConfigLoader.LoadFromFile(configPath);
         foreach (string warning in result.Warnings)
             Console.WriteLine($"[config] warning: {warning}");
         applier.Apply(result.Config);
         foreach (BarWindow bar in bars)
             bar.RefreshGeometry();
+
+        if (manager.RememberLayout && WindowStateStore.TryLoad(statePath, out SavedState state))
+            manager.ApplySavedState(state);
+
         Console.WriteLine("[reload] Done.");
     }
 }

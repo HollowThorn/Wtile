@@ -26,6 +26,7 @@ unsafe { PInvoke.CoInitializeEx(null, COINIT.COINIT_APARTMENTTHREADED); }
 
 string configDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Wtile");
 string configPath = Path.Combine(configDir, "config.yaml");
+string statePath = Path.Combine(configDir, "state.json");
 Directory.CreateDirectory(configDir);
 if (!File.Exists(configPath))
 {
@@ -52,6 +53,7 @@ manager.InitializeMonitors();
 manager.SyncInitialTaskbarState(); // before BarWindow/Arrange: recognize an already-hidden taskbar from a previous run
 manager.SetHideTitlebars(initial.Config.General.HideTitlebars);
 manager.SetBlacklist(BlacklistCompiler.Compile(initial.Config.Blacklist));
+manager.SetRememberLayout(initial.Config.General.RememberLayout);
 CommandRegistry commands = BuiltinCommands.CreateDefault(manager);
 using var tracker = new WinEventTracker();
 
@@ -67,9 +69,11 @@ using var hotkeys = new HotkeyManager(commands);
 hotkeys.ApplyBindings(initial.Config.Hotkeys);
 
 var applier = new ConfigApplier(manager, bars, hotkeys, focusBorder);
-commands.Register(new ReloadCommand(configPath, applier, bars));
+commands.Register(new ReloadCommand(configPath, applier, bars, manager, statePath));
 
 manager.Seed();
+if (manager.RememberLayout && WindowStateStore.TryLoad(statePath, out SavedState savedState))
+    manager.ApplySavedState(savedState);
 manager.OnForegroundChanged(PInvoke.GetForegroundWindow()); // seed initial title; the hook only fires on subsequent changes
 Console.WriteLine($"Tracking {manager.Windows.Count} window(s). Config: {configPath}. Waiting for events...");
 
@@ -81,6 +85,9 @@ while (true)
     PInvoke.TranslateMessage(msg);
     PInvoke.DispatchMessage(msg);
 }
+
+if (manager.RememberLayout)
+    WindowStateStore.Save(statePath, manager.CaptureState());
 
 manager.SetHideTitlebars(false); // give windows their decorations back before we stop managing them
 
