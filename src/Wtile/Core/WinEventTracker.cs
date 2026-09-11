@@ -72,6 +72,9 @@ internal sealed unsafe class WinEventTracker : IDisposable
             case PInvoke.EVENT_OBJECT_DESTROY:
                 target.OnWindowDestroyed(hwnd);
                 break;
+            case PInvoke.EVENT_SYSTEM_MOVESIZESTART:
+                target.OnWindowMoveStarted(hwnd);
+                break;
             case PInvoke.EVENT_SYSTEM_MOVESIZEEND:
                 // Fires once, when the user releases a drag/resize (the SC_MOVE/SC_SIZE modal
                 // loop exits) -- deliberately not EVENT_OBJECT_LOCATIONCHANGE, which fires

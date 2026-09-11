@@ -107,6 +107,14 @@ hotkeys:
   # hardcoded to lock the workstation, below even our low-level keyboard hook, same as
   # Ctrl+Alt+Delete). Bare Win+<key> combos besides Win+L DO work here (via a low-level keyboard
   # hook, not RegisterHotKey -- see Hotkeys/HotkeyManager.cs for why that matters on Windows).
+  #
+  # Win+G is a similar practical exception, though not hardcoded the same way as Win+L: if Xbox
+  # Game Bar's own Win+G capture is enabled (Settings > Gaming > Xbox Game Bar, or the
+  # HKCU\System\GameConfigStore\GameDVR_Enabled registry value), it intercepts Win+G through a
+  # separate input path Game Bar installs for itself -- specifically so it still works inside
+  # full-screen games that block normal hooks -- so it can open Game Bar even when Win+G is bound
+  # to something else here. Binding it below still works (both fire), but if you don't want Game
+  # Bar popping up too, disable that Xbox Game Bar setting rather than trying to out-hook it.
 
   # --- spawn ---
   - keys: "Win+Shift+T"

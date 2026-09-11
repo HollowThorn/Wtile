@@ -50,7 +50,8 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
         }
 
         manager.Changed += Refresh;
-        manager.FocusMoved += Refresh; // snaps the border to a floating window's new spot once a drag/resize ends
+        manager.FocusMoveStarted += Hide; // don't show a stale rect while the window's mid-drag
+        manager.FocusMoved += Refresh; // snaps the border to its new spot once a drag/resize ends
         Refresh();
     }
 

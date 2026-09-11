@@ -394,16 +394,47 @@ internal sealed unsafe class WindowManager
             Arrange();
     }
 
-    /// <summary>Fires once a drag/resize of the focused window finishes (see
-    /// EVENT_SYSTEM_MOVESIZEEND in WinEventTracker) so the focus border can snap to its new
-    /// position. Deliberately NOT routed through Changed/Arrange -- Arrange() would fight the
-    /// user's own drag by re-tiling everything else.</summary>
+    /// <summary>Fires when a drag/resize of the focused window begins (EVENT_SYSTEM_MOVESIZESTART)
+    /// -- the focus border hides itself for the duration instead of showing a stale rect while the
+    /// window moves out from under it. WinEventTracker only reliably tells us when a drag starts
+    /// and ends, not its position moment-to-moment (EVENT_OBJECT_LOCATIONCHANGE, which would give
+    /// that, turned out to be delivered too unreliably through this out-of-context hook to be
+    /// worth using -- see FocusMoved below).</summary>
+    public event Action? FocusMoveStarted;
+
+    public void OnWindowMoveStarted(HWND hwnd)
+    {
+        if (hwnd == FocusedHandle)
+            FocusMoveStarted?.Invoke();
+    }
+
+    /// <summary>Fires once a drag/resize of the focused window finishes (EVENT_SYSTEM_MOVESIZEEND)
+    /// so the focus border can snap to its new position. Deliberately NOT routed through Changed/
+    /// Arrange -- Arrange() would fight the user's own drag by re-tiling everything else.</summary>
     public event Action? FocusMoved;
 
     public void OnWindowMoved(HWND hwnd)
     {
-        if (hwnd == FocusedHandle)
-            FocusMoved?.Invoke();
+        if (hwnd != FocusedHandle)
+            return;
+        FocusMoved?.Invoke();
+        // DWM's extended-frame-bounds -- what the border actually measures, see
+        // WindowInspector.GetVisibleBounds -- can lag a frame or two behind the raw
+        // move/resize-end event, the same kind of race ScheduleRearrange already works around for
+        // a just-uncloaked window. One short delayed follow-up catches that up.
+        ScheduleFocusMovedRefresh(50);
+    }
+
+    private const nuint FocusMovedTimerId = 2;
+
+    private void ScheduleFocusMovedRefresh(uint delayMs) =>
+        PInvoke.SetTimer(HWND.Null, FocusMovedTimerId, delayMs, &FocusMovedTimerProc);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static void FocusMovedTimerProc(HWND hwnd, uint msg, nuint idEvent, uint dwTime)
+    {
+        PInvoke.KillTimer(HWND.Null, idEvent);
+        Current?.FocusMoved?.Invoke();
     }
 
     /// <summary>Windows to skip when tracking focus, e.g. Wtile's own bars (they can briefly
@@ -893,10 +924,11 @@ internal sealed unsafe class WindowManager
         };
         IReadOnlyList<LayoutRect> rects = layout.Arrange(new LayoutContext(workArea, tiled.Count, activeTag.LayoutParams));
 
-        HDWP hdwp = PInvoke.BeginDeferWindowPos(tiled.Count);
+        bool anyFailed = false;
         for (int i = 0; i < tiled.Count; i++)
         {
-            HWND handle = tiled[i].Handle;
+            ManagedWindow window = tiled[i];
+            HWND handle = window.Handle;
             LayoutRect r = rects[i];
 
             // Some apps ignore SetWindowPos while maximized; clear that state first.
@@ -906,11 +938,34 @@ internal sealed unsafe class WindowManager
             // Compensate for the invisible resize border (see GetInvisibleBorderInsets) so the
             // window's *visible* bounds match the layout rect exactly, not its outer window rect.
             (int insetLeft, int insetTop, int insetRight, int insetBottom) = WindowInspector.GetInvisibleBorderInsets(handle);
-            hdwp = PInvoke.DeferWindowPos(
-                hdwp, handle, HWND.Null,
+            bool moved = PInvoke.SetWindowPos(
+                handle, HWND.Null,
                 r.X - insetLeft, r.Y - insetTop, r.Width + insetLeft + insetRight, r.Height + insetTop + insetBottom,
                 SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER);
+
+            if (!moved)
+            {
+                // Most commonly an elevated window: Wtile (running non-elevated) isn't allowed to
+                // reposition a higher-integrity-level window (UIPI). Left tiled, it would
+                // permanently occupy a slot in the layout it can never actually be moved into --
+                // an invisible gap warping every other window's rect around it forever. Float it
+                // instead: TiledWindowsOn excludes floating windows, so it stops being counted
+                // (its own on-screen rect is simply left wherever it already was).
+                Console.WriteLine($"[arrange] Failed to reposition '{window.Title}' (class='{window.ClassName}') -- "
+                    + "likely running elevated; run Wtile as Administrator to tile elevated windows too. Floating it instead.");
+                window.IsFloating = true;
+                anyFailed = true;
+            }
         }
-        PInvoke.EndDeferWindowPos(hdwp);
+
+        // Previously used BeginDeferWindowPos/DeferWindowPos/EndDeferWindowPos to move every
+        // tiled window as one atomic, flicker-free batch -- but a single DeferWindowPos failure
+        // (see above) invalidates the whole batch handle for the rest of the loop with
+        // undocumented partial-failure semantics, silently leaving every window after the failure
+        // un-arranged. Plain per-window SetWindowPos isolates one window's failure from the rest,
+        // and DWM's own compositing already avoids visible tearing between separate calls on
+        // modern Windows, so the batching bought little here for what it cost in fragility.
+        if (anyFailed)
+            ArrangeMonitor(monitorIndex); // recompute without the now-floating window(s) taking a slot
     }
 }
