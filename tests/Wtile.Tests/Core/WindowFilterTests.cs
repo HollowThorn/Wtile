@@ -46,6 +46,7 @@ public class WindowFilterTests
     [InlineData("Shell_TrayWnd")]
     [InlineData("Progman")]
     [InlineData("WorkerW")]
+    [InlineData("Worker Window")]
     [InlineData("Windows.UI.Core.CoreWindow")]
     [InlineData("tooltips_class32")]
     [InlineData("NativeHWNDHost")]

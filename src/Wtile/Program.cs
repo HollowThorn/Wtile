@@ -18,6 +18,15 @@ using Wtile.Core;
 using Wtile.Hotkeys;
 using Wtile.Layouts;
 
+// Checked before anything else (no hooks/COM/windows touched yet) so `-v`/`--version` is a cheap,
+// side-effect-free way to prove which build an exe at some install path actually is -- see
+// GenerateBuildInfo in Wtile.csproj for how GitCommit/BuildTimeUtc get embedded at build time.
+if (args is ["-v" or "--version"])
+{
+    Console.WriteLine($"Wtile {Wtile.BuildInfo.GitCommit} (built {Wtile.BuildInfo.BuildTimeUtc} UTC)");
+    return;
+}
+
 Console.WriteLine("Wtile starting...");
 
 // COM must be initialized on this thread before any IMMDeviceEnumerator/IAudioEndpointVolume use

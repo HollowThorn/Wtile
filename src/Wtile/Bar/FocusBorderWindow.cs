@@ -22,14 +22,23 @@ namespace Wtile.Bar;
 internal sealed unsafe class FocusBorderWindow : IDisposable
 {
     private const string ClassName = "WtileFocusBorder";
+    private const nuint RefreshTimerId = 1;
+    private const uint RefreshIntervalMs = 150;
     private static readonly Dictionary<nint, FocusBorderWindow> Instances = [];
     private static bool _classRegistered;
+
+    /// <summary>The repeating refresh timer's callback is a static function pointer and can't
+    /// capture state (same reason WindowManager/HotkeyManager use a similar static-instance
+    /// pattern) -- there's only ever one FocusBorderWindow for the whole app (focus is global, not
+    /// per-monitor), so a single live instance registers itself here.</summary>
+    private static FocusBorderWindow? _current;
 
     private readonly WindowManager _manager;
     private readonly HWND[] _strips = new HWND[4]; // top, bottom, left, right
     private int _width;
     private Color _color;
     private bool _visible;
+    private RECT? _lastRect; // dedupes [border] log spam -- see Refresh()
 
     public FocusBorderWindow(WindowManager manager, int width, string colorHtml)
     {
@@ -49,11 +58,23 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
             manager.IgnoredFocusHandles.Add(_strips[i]);
         }
 
+        _current = this;
         manager.Changed += Refresh;
-        manager.FocusMoveStarted += Hide; // don't show a stale rect while the window's mid-drag
-        manager.FocusMoved += Refresh; // snaps the border to its new spot once a drag/resize ends
         Refresh();
+
+        // A dragged/resized window's position/size changes continuously with no single reliable
+        // WinEvent to hook: EVENT_OBJECT_LOCATIONCHANGE and EVENT_SYSTEM_MOVESIZESTART/END both
+        // turned out to not fire for every window (observed: dragging didn't move the border at
+        // all for some windows) -- and the same "window moved without an event Wtile reacts to"
+        // gap shows up for other causes too, e.g. a VM host resizing the guest's display. Rather
+        // than chase every possible cause individually, a short repeating poll just re-measures
+        // and redraws unconditionally -- cheap (one DWM bounds query + a handful of SetWindowPos
+        // calls on four small strips) and self-heals regardless of why the window moved.
+        PInvoke.SetTimer(HWND.Null, RefreshTimerId, RefreshIntervalMs, &RefreshTimerProc);
     }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static void RefreshTimerProc(HWND hwnd, uint msg, nuint idEvent, uint dwTime) => _current?.Refresh();
 
     /// <summary>Applies a reloaded config in place. Called synchronously from the "reload" command.</summary>
     public void ApplyConfig(GeneralConfig config)
@@ -99,6 +120,15 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
         {
             Hide();
             return;
+        }
+
+        // Temporary diagnostic: only logs when the measured rect actually changes (not every
+        // ~150ms poll tick), so a burst of these while dragging confirms the poll is both firing
+        // and picking up the live position; silence during a drag means it isn't.
+        if (_lastRect is null || !_lastRect.Value.Equals(r))
+        {
+            Console.WriteLine($"[border] '{focused.Title}' -> ({r.left},{r.top}) {w}x{h}");
+            _lastRect = r;
         }
 
         int bw = Math.Min(_width, Math.Min(w, h) / 2); // never let strips overlap past the window's own center
@@ -184,6 +214,8 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
 
     public void Dispose()
     {
+        PInvoke.KillTimer(HWND.Null, RefreshTimerId);
+        _current = null;
         foreach (HWND strip in _strips)
         {
             Instances.Remove((nint)strip.Value);

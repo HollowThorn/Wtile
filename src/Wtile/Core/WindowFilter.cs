@@ -28,6 +28,9 @@ public static class WindowFilter
         "Shell_SecondaryTrayWnd",
         "Progman",
         "WorkerW",
+        "Worker Window", // explorer.exe's desktop/wallpaper host -- recreated on a display change
+                         // (e.g. a VM resizing the guest's resolution), briefly appearing as a
+                         // plain untitled top-level window before Explorer re-parents/cloaks it
         "Windows.UI.Core.CoreWindow",
         "MultitaskingViewFrame",
         "XamlExplorerHostIslandWindow",

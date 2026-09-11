@@ -72,17 +72,6 @@ internal sealed unsafe class WinEventTracker : IDisposable
             case PInvoke.EVENT_OBJECT_DESTROY:
                 target.OnWindowDestroyed(hwnd);
                 break;
-            case PInvoke.EVENT_SYSTEM_MOVESIZESTART:
-                target.OnWindowMoveStarted(hwnd);
-                break;
-            case PInvoke.EVENT_SYSTEM_MOVESIZEEND:
-                // Fires once, when the user releases a drag/resize (the SC_MOVE/SC_SIZE modal
-                // loop exits) -- deliberately not EVENT_OBJECT_LOCATIONCHANGE, which fires
-                // continuously during the drag but was unreliably delivered cross-process via this
-                // out-of-context hook; this is a single, cheap, always-delivered system event, so
-                // the focus border just snaps to the window's final position once it's let go.
-                target.OnWindowMoved(hwnd);
-                break;
             case PInvoke.EVENT_SYSTEM_MINIMIZESTART:
                 target.OnMinimizeChanged(hwnd, minimized: true);
                 break;
