@@ -9,6 +9,7 @@
 using System.Reflection;
 using Windows.Win32;
 using Windows.Win32.Foundation;
+using Windows.Win32.System.Com;
 using Windows.Win32.UI.WindowsAndMessaging;
 using Wtile.Bar;
 using Wtile.Commands;
@@ -18,6 +19,10 @@ using Wtile.Hotkeys;
 using Wtile.Layouts;
 
 Console.WriteLine("Wtile starting...");
+
+// COM must be initialized on this thread before any IMMDeviceEnumerator/IAudioEndpointVolume use
+// (see VolumeStats.cs). Cheap and safe even if the "volume" segment isn't configured.
+unsafe { PInvoke.CoInitializeEx(null, COINIT.COINIT_APARTMENTTHREADED); }
 
 string configDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Wtile");
 string configPath = Path.Combine(configDir, "config.yaml");
@@ -81,6 +86,8 @@ manager.SetHideTitlebars(false); // give windows their decorations back before w
 
 foreach (BarWindow bar in bars)
     bar.Dispose();
+
+PInvoke.CoUninitialize();
 
 static ConfigLoadResult LoadAndReport(string path)
 {

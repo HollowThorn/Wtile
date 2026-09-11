@@ -82,3 +82,15 @@ MONITORINFOF_PRIMARY
 CreateSolidBrush
 FillRect
 DeleteObject
+GetSystemTimes
+GlobalMemoryStatusEx
+GetSystemPowerStatus
+GetIfTable2
+FreeMibTable
+IMMDeviceEnumerator
+IMMDevice
+IAudioEndpointVolume
+MMDeviceEnumerator
+CoCreateInstance
+CoInitializeEx
+CoUninitialize
