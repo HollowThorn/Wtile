@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Windows.Win32;
+using Windows.Win32.Foundation;
 using Wtile.Bar;
 using Wtile.Config;
 using Wtile.Core;
@@ -235,6 +236,21 @@ internal sealed class ToggleTaskbarCommand(WindowManager manager) : ICommand
     public void Execute(IReadOnlyList<string> args) => manager.ToggleTaskbar();
 }
 
+/// <summary>Prints the focused window's process/class/title to the console -- lets you copy exact
+/// values straight into a blacklist: rule instead of guessing or reaching for Spy++.</summary>
+internal sealed class InspectWindowCommand : ICommand
+{
+    public string Name => "inspect-window";
+
+    public void Execute(IReadOnlyList<string> args)
+    {
+        HWND hwnd = PInvoke.GetForegroundWindow();
+        WindowSnapshot snapshot = WindowInspector.Describe(hwnd);
+        WindowInspector.TryGetProcessName(hwnd, out string processName);
+        Console.WriteLine($"[inspect] process='{processName}' class='{snapshot.ClassName}' title='{snapshot.Title}'");
+    }
+}
+
 /// <summary>
 /// Re-reads config.yaml from disk and applies it (tags/colors/hotkeys/layout params/bar
 /// segments), then unconditionally refreshes the bar's screen geometry and re-arranges --
@@ -286,6 +302,7 @@ internal static class BuiltinCommands
         registry.Register(new SpawnCommand());
         registry.Register(new QuitCommand());
         registry.Register(new ToggleTaskbarCommand(manager));
+        registry.Register(new InspectWindowCommand());
         return registry;
     }
 }

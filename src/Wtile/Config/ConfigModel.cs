@@ -10,6 +10,7 @@ public sealed class WtileConfig
     public List<LayoutConfig> Layouts { get; set; } = [];
     public BarConfig Bar { get; set; } = new();
     public List<HotkeyBinding> Hotkeys { get; set; } = [];
+    public List<BlacklistRule> Blacklist { get; set; } = [];
 }
 
 public sealed class GeneralConfig
@@ -31,13 +32,6 @@ public sealed class GeneralConfig
     /// are remembered per-window and restored on exit, so turning this off (or quitting Wtile)
     /// gives windows their normal decorations back.</summary>
     public bool HideTitlebars { get; set; } = false;
-
-    /// <summary>Hides the real Windows taskbar as soon as Wtile starts, same as pressing
-    /// toggle-taskbar (Win+Space by default) manually right after launch. Enforced once at
-    /// startup regardless of whatever state the taskbar was left in by a previous run -- not
-    /// reapplied on "reload", since that would fight the toggle-taskbar hotkey during a live
-    /// session.</summary>
-    public bool HideTaskbarOnStartup { get; set; } = false;
 }
 
 public sealed class LayoutConfig
@@ -57,29 +51,12 @@ public sealed class BarConfig
     public string Position { get; set; } = "top"; // "top" | "bottom"
     public BarSegmentsConfig Segments { get; set; } = new();
     public BarColorsConfig Colors { get; set; } = new();
-
-    /// <summary>Optional per-module format-string overrides for the system-stat segments (cpu,
-    /// memory, battery, network, volume) -- a module not listed here, or listed with an empty
-    /// Format, uses its own built-in default.</summary>
-    public List<BarModuleConfig> Modules { get; set; } = [];
 }
 
 public sealed class BarSegmentsConfig
 {
     public List<string> Left { get; set; } = ["tags", "layout-symbol", "window-title"];
     public List<string> Right { get; set; } = ["clock"];
-}
-
-public sealed class BarModuleConfig
-{
-    public string Name { get; set; } = "";
-
-    /// <summary>string.Format-style format string with positional placeholders ({0}, {1}, ...) --
-    /// meaning is module-specific (see docs/config.sample.yaml). Empty (the default) means "use
-    /// this module's built-in default format" -- same convention as BarColorsConfig.OccupiedTag.
-    /// A malformed format string falls back to the built-in default at draw time rather than
-    /// throwing (see Core/SegmentFormat.cs).</summary>
-    public string Format { get; set; } = "";
 }
 
 public sealed class BarColorsConfig
@@ -101,4 +78,16 @@ public sealed class HotkeyBinding
     public string Keys { get; set; } = "";
     public string Command { get; set; } = "";
     public List<string> Args { get; set; } = [];
+}
+
+/// <summary>One window-exclusion rule: a window is blacklisted (never managed/tiled) if every
+/// non-blank field here matches it as a regex (AND within a rule); the blacklist as a whole
+/// excludes a window if any rule matches (OR across rules). A blank field means "don't constrain
+/// on this field" -- a rule where every field is blank would match every window and is rejected
+/// at load time (see ConfigLoader.Validate) rather than silently blacklisting everything.</summary>
+public sealed class BlacklistRule
+{
+    public string ProcessName { get; set; } = "";
+    public string ClassName { get; set; } = "";
+    public string Title { get; set; } = "";
 }

@@ -35,6 +35,7 @@ public static class WindowFilter
         "TaskListThumbnailWnd",
         "tooltips_class32",
         "IME",
+        "NativeHWNDHost", // legacy volume/brightness OSD flyout host (stable since Vista)
     };
 
     public static bool IsManageable(in WindowSnapshot window)

@@ -24,6 +24,8 @@ internal sealed unsafe class WindowManager
     private readonly LayoutRegistry _layouts;
     private readonly string _defaultLayoutName;
     private readonly IReadOnlyDictionary<string, double> _defaultLayoutParams;
+    private IReadOnlyList<CompiledBlacklistRule> _blacklist = [];
+    private bool _blacklistNeedsProcessName;
     private List<Monitor> _monitors = [];
 
     public WindowManager(LayoutRegistry layouts, string defaultLayoutName, IReadOnlyDictionary<string, double> defaultLayoutParams, int tagCount = 9)
@@ -97,22 +99,32 @@ internal sealed unsafe class WindowManager
     public bool HasWindowsOnTag(int monitorIndex, int tagIndex) =>
         _windows.Exists(w => w.MonitorIndex == monitorIndex && (w.TagIndex == tagIndex || w.IsPinned));
 
-    /// <summary>Hides or shows the real Windows taskbar and reclaims/releases its space for
-    /// tiling. Called both by toggle-taskbar and, once at startup, to enforce
-    /// general.hideTaskbarOnStartup regardless of whatever state the taskbar happened to be left
-    /// in by a previous run.</summary>
-    public void SetTaskbarHidden(bool hidden)
+    /// <summary>Call once at startup, before the first Arrange(): if the real taskbar is already
+    /// hidden (e.g. a previous run hid it and exited before restoring it), recognize that instead
+    /// of defaulting to "shown" and leaving its reserved space unused.</summary>
+    public void SyncInitialTaskbarState() => IsTaskbarHidden = !TaskbarController.IsVisible();
+
+    public void ToggleTaskbar()
     {
-        IsTaskbarHidden = hidden;
-        TaskbarController.SetVisible(!hidden);
+        IsTaskbarHidden = !IsTaskbarHidden;
+        TaskbarController.SetVisible(!IsTaskbarHidden);
         Arrange();
     }
-
-    public void ToggleTaskbar() => SetTaskbarHidden(!IsTaskbarHidden);
 
     /// <summary>Applies (or lifts) title-bar hiding across every currently-tracked window --
     /// called from config load/reload with general.hideTitlebars, and with false at shutdown so
     /// windows get their decorations back even if Wtile exits while the flag was on.</summary>
+    /// <summary>Replaces the live set of blacklist rules (see WindowBlacklist). Only affects
+    /// windows opened after this call -- one already being managed is not retroactively released
+    /// (TryAdd, where the check runs, is a no-op for an already-tracked window). No lock needed:
+    /// WindowManager is only ever touched on the single WinEventHook pump thread, same reasoning
+    /// as SetHideTitlebars.</summary>
+    public void SetBlacklist(IReadOnlyList<CompiledBlacklistRule> rules)
+    {
+        _blacklist = rules;
+        _blacklistNeedsProcessName = rules.Any(r => r.ProcessName is not null);
+    }
+
     public void SetHideTitlebars(bool hidden)
     {
         HideTitlebars = hidden;
@@ -229,12 +241,12 @@ internal sealed unsafe class WindowManager
         if (IgnoredFocusHandles.Contains(hwnd))
             return;
 
-        // Some apps' main window becomes visible via a DWM "uncloak" rather than a fresh
-        // SW_SHOW (observed with Firefox) -- WinEventTracker only listens for EVENT_OBJECT_SHOW,
-        // so that transition never reaches TryAdd and the window is silently left untracked.
-        // EVENT_SYSTEM_FOREGROUND fires reliably regardless of how a window became visible, so
-        // give any not-yet-tracked window one more chance to be picked up right when it's
-        // actually used (subject to the same manageable-window filter as everything else).
+        // Belt-and-suspenders fallback for WinEventTracker's EVENT_OBJECT_UNCLOAKED handler
+        // (the correctly-timed fix for apps whose main window appears via a DWM "uncloak" rather
+        // than a fresh SW_SHOW, e.g. Firefox): if a window somehow still isn't tracked by the
+        // time it's focused, give it one more chance here rather than leaving it stuck forever
+        // (subject to the same manageable-window filter as everything else). Idempotent -- TryAdd
+        // is a no-op if EVENT_OBJECT_UNCLOAKED already picked it up, which is the common case.
         if (Find(hwnd) is null)
             TryAdd(hwnd, arrange: true);
 
@@ -598,6 +610,16 @@ internal sealed unsafe class WindowManager
             return;
         }
 
+        if (_blacklist.Count > 0)
+        {
+            string processName = _blacklistNeedsProcessName && WindowInspector.TryGetProcessName(hwnd, out string name) ? name : "";
+            if (WindowBlacklist.IsBlacklisted(_blacklist, processName, snapshot.ClassName, snapshot.Title))
+            {
+                Console.WriteLine($"[blacklist] Skipped '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}')");
+                return;
+            }
+        }
+
         int monitorIndex = ResolveMonitorIndex(hwnd);
         Monitor monitor = _monitors[monitorIndex];
 
@@ -609,6 +631,7 @@ internal sealed unsafe class WindowManager
             TagIndex = monitor.ActiveTagIndex,
             OriginalStyle = WindowInspector.GetStyle(hwnd),
         };
+        Console.WriteLine($"[manage] '{window.Title}' (class='{window.ClassName}')");
         _windows.Insert(0, window); // dwm-style: a new window becomes master
         if (HideTitlebars && !IsTitlebarHideExempt(window.ClassName))
             WindowInspector.SetTitlebarHidden(hwnd, window.OriginalStyle, hidden: true);

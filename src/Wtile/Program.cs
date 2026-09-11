@@ -9,7 +9,6 @@
 using System.Reflection;
 using Windows.Win32;
 using Windows.Win32.Foundation;
-using Windows.Win32.System.Com;
 using Windows.Win32.UI.WindowsAndMessaging;
 using Wtile.Bar;
 using Wtile.Commands;
@@ -19,10 +18,6 @@ using Wtile.Hotkeys;
 using Wtile.Layouts;
 
 Console.WriteLine("Wtile starting...");
-
-// COM must be initialized on this thread before any IMMDeviceEnumerator/IAudioEndpointVolume use
-// (see VolumeStats.cs). Cheap and safe even if the "volume" segment isn't configured.
-unsafe { PInvoke.CoInitializeEx(null, COINIT.COINIT_APARTMENTTHREADED); }
 
 string configDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Wtile");
 string configPath = Path.Combine(configDir, "config.yaml");
@@ -49,8 +44,9 @@ var defaultLayoutParams = new Dictionary<string, double>
 LayoutRegistry layouts = LayoutRegistry.CreateDefault();
 var manager = new WindowManager(layouts, initial.Config.General.DefaultLayout, defaultLayoutParams, initial.Config.General.TagCount);
 manager.InitializeMonitors();
-manager.SetTaskbarHidden(initial.Config.General.HideTaskbarOnStartup);
+manager.SyncInitialTaskbarState(); // before BarWindow/Arrange: recognize an already-hidden taskbar from a previous run
 manager.SetHideTitlebars(initial.Config.General.HideTitlebars);
+manager.SetBlacklist(BlacklistCompiler.Compile(initial.Config.Blacklist));
 CommandRegistry commands = BuiltinCommands.CreateDefault(manager);
 using var tracker = new WinEventTracker();
 
@@ -83,8 +79,6 @@ manager.SetHideTitlebars(false); // give windows their decorations back before w
 
 foreach (BarWindow bar in bars)
     bar.Dispose();
-
-PInvoke.CoUninitialize();
 
 static ConfigLoadResult LoadAndReport(string path)
 {

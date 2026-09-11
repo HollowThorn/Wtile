@@ -45,6 +45,14 @@ internal sealed unsafe class WinEventTracker : IDisposable
             case PInvoke.EVENT_OBJECT_SHOW:
                 target.OnWindowShown(hwnd);
                 break;
+            case PInvoke.EVENT_OBJECT_UNCLOAKED:
+                // Some apps' main window becomes visible via a DWM "uncloak" rather than a fresh
+                // SW_SHOW (observed with Firefox) -- EVENT_OBJECT_SHOW never fires for that
+                // transition. This is the correctly-timed fix (see OnForegroundChanged for the
+                // looser, focus-triggered fallback this complements -- that one can race ahead of
+                // the actual uncloak and miss a still-cloaked window).
+                target.OnWindowShown(hwnd);
+                break;
             case PInvoke.EVENT_OBJECT_HIDE:
                 target.OnWindowHidden(hwnd);
                 break;

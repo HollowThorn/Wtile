@@ -26,6 +26,7 @@ internal sealed class ConfigApplier(WindowManager manager, IReadOnlyList<BarWind
         manager.UpdateTagCount(config.General.TagCount);
         if (manager.HideTitlebars != config.General.HideTitlebars)
             manager.SetHideTitlebars(config.General.HideTitlebars);
+        manager.SetBlacklist(BlacklistCompiler.Compile(config.Blacklist));
         foreach (BarWindow bar in bars)
             bar.ApplyConfig(config.Bar);
         hotkeys.ApplyBindings(config.Hotkeys);

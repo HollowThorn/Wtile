@@ -151,6 +151,51 @@ public class ConfigLoaderTests
     }
 
     [Fact]
+    public void ParsesBlacklistSection()
+    {
+        const string yaml = """
+            blacklist:
+              - processName: "^steam\\.exe$"
+                title: "Friends"
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Warnings);
+        BlacklistRule rule = Assert.Single(result.Config.Blacklist);
+        Assert.Equal("^steam\\.exe$", rule.ProcessName);
+        Assert.Equal("Friends", rule.Title);
+    }
+
+    [Fact]
+    public void InvalidBlacklistRegex_IsDroppedWithWarning()
+    {
+        const string yaml = """
+            blacklist:
+              - className: "("
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Config.Blacklist);
+        Assert.Contains(result.Warnings, w => w.Contains("className"));
+    }
+
+    [Fact]
+    public void AllBlankBlacklistRule_IsDroppedWithWarning()
+    {
+        const string yaml = """
+            blacklist:
+              - processName: ""
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Config.Blacklist);
+        Assert.Contains(result.Warnings, w => w.Contains("would match every window"));
+    }
+
+    [Fact]
     public void RealSampleConfig_ParsesCleanlyWithNoWarnings()
     {
         ConfigLoadResult result = ConfigLoader.LoadFromFile(SampleConfigPath);

@@ -48,6 +48,7 @@ public class WindowFilterTests
     [InlineData("WorkerW")]
     [InlineData("Windows.UI.Core.CoreWindow")]
     [InlineData("tooltips_class32")]
+    [InlineData("NativeHWNDHost")]
     public void KnownShellClasses_AreNotManageable(string className)
     {
         var w = NormalApp(className);

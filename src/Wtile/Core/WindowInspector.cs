@@ -4,6 +4,7 @@ using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Dwm;
 using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.System.Threading;
 using Windows.Win32.UI.WindowsAndMessaging;
 using Wtile.Layouts;
 
@@ -50,6 +51,44 @@ internal static unsafe class WindowInspector
         Span<char> buffer = stackalloc char[256];
         int len = PInvoke.GetClassName(hwnd, buffer);
         return len > 0 ? new string(buffer[..len]) : "";
+    }
+
+    /// <summary>Resolves the executable file name (e.g. "notepad.exe") owning a window, for
+    /// process-name blacklist matching. Uses PROCESS_QUERY_LIMITED_INFORMATION -- the minimal
+    /// access right, which succeeds even against most elevated/protected processes -- and fails
+    /// gracefully (returns false) rather than throwing on access-denied, so a protected process
+    /// can never crash the WM.</summary>
+    public static bool TryGetProcessName(HWND hwnd, out string processName)
+    {
+        processName = "";
+
+        PInvoke.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == 0)
+            return false;
+
+        HANDLE process = PInvoke.OpenProcess(PROCESS_ACCESS_RIGHTS.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (process.IsNull)
+            return false;
+
+        try
+        {
+            Span<char> buffer = stackalloc char[260]; // MAX_PATH
+            uint size = (uint)buffer.Length;
+            fixed (char* p = buffer)
+            {
+                if (!PInvoke.QueryFullProcessImageName(process, PROCESS_NAME_FORMAT.PROCESS_NAME_WIN32, new PWSTR(p), &size))
+                    return false;
+            }
+            if (size == 0)
+                return false;
+
+            processName = Path.GetFileName(new string(buffer[..(int)size]));
+            return processName.Length > 0;
+        }
+        finally
+        {
+            PInvoke.CloseHandle(process);
+        }
     }
 
     public readonly record struct MonitorInfo(HMONITOR Handle, bool IsPrimary);

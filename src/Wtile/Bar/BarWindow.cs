@@ -69,7 +69,7 @@ internal sealed unsafe class BarWindow : IDisposable
         Instances[(nint)_hwnd.Value] = this;
         manager.IgnoredFocusHandles.Add(_hwnd);
 
-        RebuildSegments(config);
+        RebuildSegments(config.Segments);
         ApplyReservedInset();
 
         manager.Changed += () => PInvoke.InvalidateRect(_hwnd, (RECT?)null, false);
@@ -89,7 +89,7 @@ internal sealed unsafe class BarWindow : IDisposable
             old.Dispose();
         }
 
-        RebuildSegments(config);
+        RebuildSegments(config.Segments);
 
         bool nowBottom = config.Position == "bottom";
         if (_height != config.Height || _isBottom != nowBottom)
@@ -133,20 +133,17 @@ internal sealed unsafe class BarWindow : IDisposable
         _manager.Arrange();
     }
 
-    private void RebuildSegments(BarConfig config)
+    private void RebuildSegments(BarSegmentsConfig segmentsConfig)
     {
-        _renderer = new BarRenderer(
-            BuildSegments(config.Segments.Left, config.Modules),
-            BuildSegments(config.Segments.Right, config.Modules),
-            _theme);
+        _renderer = new BarRenderer(BuildSegments(segmentsConfig.Left), BuildSegments(segmentsConfig.Right), _theme);
     }
 
-    private ISegment[] BuildSegments(IEnumerable<string> names, List<BarModuleConfig> modules)
+    private ISegment[] BuildSegments(IEnumerable<string> names)
     {
         var result = new List<ISegment>();
         foreach (string name in names)
         {
-            ISegment? segment = CreateSegment(name, modules);
+            ISegment? segment = CreateSegment(name);
             if (segment is not null)
                 result.Add(segment);
             else
@@ -155,24 +152,14 @@ internal sealed unsafe class BarWindow : IDisposable
         return [.. result];
     }
 
-    private ISegment? CreateSegment(string name, List<BarModuleConfig> modules) => name switch
+    private ISegment? CreateSegment(string name) => name switch
     {
         "tags" => new TagsSegment(_manager, _commands, _theme, _monitorIndex),
         "layout-symbol" => new LayoutSymbolSegment(_manager, _theme, _monitorIndex),
         "window-title" => new TitleSegment(_manager, _theme),
         "clock" => new ClockSegment(_theme),
-        "cpu" => new CpuSegment(_theme, FormatFor(modules, "cpu")),
-        "memory" => new MemorySegment(_theme, FormatFor(modules, "memory")),
-        "battery" => new BatterySegment(_theme, FormatFor(modules, "battery")),
-        "network" => new NetworkSegment(_theme, FormatFor(modules, "network")),
-        "volume" => new VolumeSegment(_theme, FormatFor(modules, "volume")),
         _ => null,
     };
-
-    private static string? FormatFor(List<BarModuleConfig> modules, string name) =>
-        modules.Find(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)) is { Format.Length: > 0 } match
-            ? match.Format
-            : null;
 
     private static void EnsureClassRegistered()
     {

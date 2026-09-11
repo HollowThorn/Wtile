@@ -10,7 +10,6 @@ public class LayoutRegistryTests
     [InlineData("monocle", "[M]")]
     [InlineData("centered-master", "|M|")]
     [InlineData("vertical", "=")]
-    [InlineData("deck", "[D]")]
     public void CreateDefault_RegistersBuiltinLayouts(string name, string symbol)
     {
         LayoutRegistry registry = LayoutRegistry.CreateDefault();

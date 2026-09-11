@@ -26,6 +26,7 @@ EVENT_OBJECT_END
 EVENT_OBJECT_SHOW
 EVENT_OBJECT_HIDE
 EVENT_OBJECT_DESTROY
+EVENT_OBJECT_UNCLOAKED
 EVENT_SYSTEM_MINIMIZESTART
 EVENT_SYSTEM_MINIMIZEEND
 EVENT_SYSTEM_FOREGROUND
@@ -65,6 +66,11 @@ VIRTUAL_KEY
 WINDOWS_HOOK_ID
 KBDLLHOOKSTRUCT
 GetWindowThreadProcessId
+OpenProcess
+PROCESS_ACCESS_RIGHTS
+QueryFullProcessImageName
+PROCESS_NAME_FORMAT
+CloseHandle
 AttachThreadInput
 GetCurrentThreadId
 BringWindowToTop
@@ -73,15 +79,3 @@ GetWindowRect
 GetMonitorInfo
 MonitorFromWindow
 MONITORINFOF_PRIMARY
-GetSystemTimes
-GlobalMemoryStatusEx
-GetSystemPowerStatus
-GetIfTable2
-FreeMibTable
-IMMDeviceEnumerator
-IMMDevice
-IAudioEndpointVolume
-MMDeviceEnumerator
-CoCreateInstance
-CoInitializeEx
-CoUninitialize
