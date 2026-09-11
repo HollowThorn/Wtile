@@ -91,6 +91,15 @@ internal sealed class KillWindowCommand(WindowManager manager) : ICommand
     public void Execute(IReadOnlyList<string> args) => manager.CloseFocusedWindow();
 }
 
+/// <summary>Forcibly terminates the focused window's process -- for something kill-window's polite
+/// WM_CLOSE doesn't budge (a hung app, or a system flyout/dialog that never processes WM_CLOSE at
+/// all). Destructive: no save prompt, no chance for the app to object.</summary>
+internal sealed class ForceKillWindowCommand(WindowManager manager) : ICommand
+{
+    public string Name => "force-kill-window";
+    public void Execute(IReadOnlyList<string> args) => manager.ForceCloseFocusedWindow();
+}
+
 /// <summary>Nudges the active tag's master-area window count. Args: <c>["&lt;signed delta, e.g. +1&gt;"]</c>.</summary>
 internal sealed class AdjustNmasterCommand(WindowManager manager) : ICommand
 {
@@ -308,6 +317,7 @@ internal static class BuiltinCommands
         registry.Register(new FocusMonitorCommand(manager));
         registry.Register(new MoveWindowToMonitorCommand(manager));
         registry.Register(new KillWindowCommand(manager));
+        registry.Register(new ForceKillWindowCommand(manager));
         registry.Register(new SpawnCommand());
         registry.Register(new QuitCommand());
         registry.Register(new ToggleTaskbarCommand(manager));

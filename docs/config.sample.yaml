@@ -126,7 +126,9 @@ hotkeys:
   - keys: "Win+X"
     command: swap-master           # swaps the focused window with master
   - keys: "Win+Q"
-    command: kill-window
+    command: kill-window        # polite WM_CLOSE -- a well-behaved app gets to prompt/save first
+  - keys: "Win+Ctrl+Q"          # forcibly terminates the process -- no save prompt, for something
+    command: force-kill-window  # that ignores WM_CLOSE entirely (a hang, or a system flyout/dialog)
   - keys: "Win+G"
     command: toggle-floating
 

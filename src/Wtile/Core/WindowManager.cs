@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.System.Threading;
 using Windows.Win32.UI.WindowsAndMessaging;
 using Wtile.Layouts;
 
@@ -377,6 +378,34 @@ internal sealed unsafe class WindowManager
         Arrange();
     }
 
+    /// <summary>DWM can cloak a tracked window -- a virtual-desktop switch away from it, or (some
+    /// shell flyouts, like the clipboard-history/emoji panel opened via Win+V/Win+.) it being
+    /// dismissed -- without ever firing EVENT_OBJECT_HIDE or EVENT_OBJECT_DESTROY, since
+    /// IsWindowVisible stays true the whole time. Left unhandled, a cloaked window stays counted
+    /// as tiled forever: an invisible gap in the layout that nothing ever fills. Re-arranging here
+    /// makes TiledWindowsOn's IsCloaked check (which already excludes it) take effect immediately,
+    /// rather than waiting for some unrelated future Arrange() to happen to skip it. Deliberately
+    /// does NOT untrack the window (unlike OnWindowHidden/OnWindowDestroyed) -- a virtual-desktop
+    /// cloak is not a close, and EVENT_OBJECT_UNCLOAKED already re-surfaces it (via OnWindowShown)
+    /// with its placement intact when it uncloaks again.</summary>
+    public void OnWindowCloaked(HWND hwnd)
+    {
+        if (Find(hwnd) is not null)
+            Arrange();
+    }
+
+    /// <summary>Fires once a drag/resize of the focused window finishes (see
+    /// EVENT_SYSTEM_MOVESIZEEND in WinEventTracker) so the focus border can snap to its new
+    /// position. Deliberately NOT routed through Changed/Arrange -- Arrange() would fight the
+    /// user's own drag by re-tiling everything else.</summary>
+    public event Action? FocusMoved;
+
+    public void OnWindowMoved(HWND hwnd)
+    {
+        if (hwnd == FocusedHandle)
+            FocusMoved?.Invoke();
+    }
+
     /// <summary>Windows to skip when tracking focus, e.g. Wtile's own bars (they can briefly
     /// report foreground on creation despite WS_EX_NOACTIVATE).</summary>
     public HashSet<HWND> IgnoredFocusHandles { get; } = [];
@@ -579,10 +608,37 @@ internal sealed unsafe class WindowManager
             PInvoke.PostMessage(FocusedHandle, PInvoke.WM_CLOSE, 0, 0);
     }
 
+    /// <summary>Forcibly terminates the process owning the focused window (TerminateProcess) --
+    /// for a hung or non-cooperating window that ignores kill-window's WM_CLOSE (some shell
+    /// flyouts/system dialogs never process it at all). Destructive: unlike WM_CLOSE, the target
+    /// gets no chance to prompt or save, so it's a separate command/hotkey rather than folded into
+    /// kill-window itself.</summary>
+    public void ForceCloseFocusedWindow()
+    {
+        if (FocusedHandle.IsNull)
+            return;
+
+        PInvoke.GetWindowThreadProcessId(FocusedHandle, out uint pid);
+        if (pid == 0)
+            return;
+
+        HANDLE process = PInvoke.OpenProcess(PROCESS_ACCESS_RIGHTS.PROCESS_TERMINATE, false, pid);
+        if (process.IsNull)
+            return;
+        try
+        {
+            PInvoke.TerminateProcess(process, 1);
+        }
+        finally
+        {
+            PInvoke.CloseHandle(process);
+        }
+    }
+
     private List<ManagedWindow> TiledWindowsOnCurrentMonitor() => TiledWindowsOn(CurrentMonitor, CurrentMonitorIndex);
 
     private List<ManagedWindow> TiledWindowsOn(Monitor monitor, int monitorIndex) =>
-        _windows.FindAll(w => IsVisibleOn(w, monitor, monitorIndex) && !w.IsMinimized && !w.IsFloating);
+        _windows.FindAll(w => IsVisibleOn(w, monitor, monitorIndex) && !w.IsMinimized && !w.IsFloating && !WindowInspector.IsCloaked(w.Handle));
 
     /// <summary>True if this window is currently supposed to be visible on this specific monitor:
     /// on its active tag, pinned (bug.n's "pin" -- visible/tiled on every tag regardless of its

@@ -23,11 +23,6 @@ internal static unsafe class WindowInspector
         bool isToolWindow = (exStyle & (int)WINDOW_EX_STYLE.WS_EX_TOOLWINDOW) != 0;
         bool isAppWindow = (exStyle & (int)WINDOW_EX_STYLE.WS_EX_APPWINDOW) != 0;
 
-        int cloaked = 0;
-        HRESULT hr = PInvoke.DwmGetWindowAttribute(
-            hwnd, DWMWINDOWATTRIBUTE.DWMWA_CLOAKED, &cloaked, sizeof(int));
-        bool isCloaked = hr.Succeeded && cloaked != 0;
-
         return new WindowSnapshot(
             Title: GetWindowText(hwnd),
             ClassName: GetClassName(hwnd),
@@ -36,7 +31,19 @@ internal static unsafe class WindowInspector
             HasOwner: hasOwner,
             IsToolWindow: isToolWindow,
             IsAppWindow: isAppWindow,
-            IsCloaked: isCloaked);
+            IsCloaked: IsCloaked(hwnd));
+    }
+
+    /// <summary>True if DWM is currently cloaking this window -- e.g. it's on another virtual
+    /// desktop, or (some shell flyouts, like the clipboard-history/emoji panel) it was dismissed
+    /// without ever being destroyed or Win32-hidden: IsWindowVisible stays true the whole time, so
+    /// this is the only way to tell it's not actually on screen. See WindowManager.TiledWindowsOn,
+    /// which excludes cloaked windows from tiling for exactly that reason.</summary>
+    public static bool IsCloaked(HWND hwnd)
+    {
+        int cloaked = 0;
+        HRESULT hr = PInvoke.DwmGetWindowAttribute(hwnd, DWMWINDOWATTRIBUTE.DWMWA_CLOAKED, &cloaked, sizeof(int));
+        return hr.Succeeded && cloaked != 0;
     }
 
     public static string GetWindowText(HWND hwnd)
