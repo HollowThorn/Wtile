@@ -66,7 +66,7 @@ Wtile wouldn't exist without these projects:
 
 - [dwm](https://dwm.suckless.org/) (MIT/X Consortium License) — the layout model, tag concept, and overall philosophy.
 - [bug.n](https://github.com/fuhsjr00/bug.n) (GPLv3) — proof this works on Win32, and the source of several features (pinning, taskbar hiding) that don't have a dwm equivalent.
-- [MangoWM](https://github.com/mango-wm/mango) — additional inspiration.
+- [MangoWM](https://github.com/mangowm/mango) — additional inspiration.
 
 ## License
 
