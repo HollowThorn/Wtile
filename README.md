@@ -11,7 +11,7 @@ install, no JIT warmup), built for environments where switching operating system
 
 ## Status
 
-Actively developed, not yet a 1.0. Expect rough edges. Issues and PRs welcome.
+Actively developed, not yet a 1.0. Expect rough edges.
 
 ## Features
 
