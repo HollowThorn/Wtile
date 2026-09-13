@@ -58,6 +58,9 @@ WM_HOTKEY
 WM_CLOSE
 WM_KEYDOWN
 WM_SYSKEYDOWN
+WM_KEYUP
+WM_SYSKEYUP
+SendInput
 SetForegroundWindow
 SetWindowsHookEx
 UnhookWindowsHookEx

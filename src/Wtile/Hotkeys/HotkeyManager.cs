@@ -44,6 +44,10 @@ internal sealed unsafe class HotkeyManager : IDisposable
     private readonly Dictionary<KeyCombo, HotkeyBinding> _bindings = [];
     private HHOOK _hook;
 
+    /// <summary>Set when a Win-modified hotkey fires and cleared on the matching Win key-up (see
+    /// <see cref="DisguiseWinKeyUp"/>) -- tracks whether the *next* Win release still needs disguising.</summary>
+    private bool _winKeyDisguisePending;
+
     public HotkeyManager(CommandRegistry commands)
     {
         _commands = commands;
@@ -79,19 +83,65 @@ internal sealed unsafe class HotkeyManager : IDisposable
     private static LRESULT LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
     {
         HotkeyManager? self = _activeHook;
-        if (nCode == 0 && self is not null && (wParam.Value == PInvoke.WM_KEYDOWN || wParam.Value == PInvoke.WM_SYSKEYDOWN))
+        if (nCode == 0 && self is not null)
         {
             var data = (KBDLLHOOKSTRUCT*)lParam.Value;
-            var combo = new KeyCombo(CurrentModifiers(), data->vkCode);
-            if (self._bindings.ContainsKey(combo))
+            if (wParam.Value == PInvoke.WM_KEYDOWN || wParam.Value == PInvoke.WM_SYSKEYDOWN)
             {
-                nint packed = (nint)combo.VirtualKey | ((nint)(uint)combo.Modifiers << 32);
-                PInvoke.PostMessage(self._hwnd, WM_APP_HOTKEY_FIRED, 0, packed);
-                return new LRESULT(1); // swallow -- keeps it from reaching Explorer/the focused app
+                var combo = new KeyCombo(CurrentModifiers(), data->vkCode);
+                if (self._bindings.ContainsKey(combo))
+                {
+                    if ((combo.Modifiers & HotkeyModifiers.Win) != 0)
+                        self._winKeyDisguisePending = true;
+                    nint packed = (nint)combo.VirtualKey | ((nint)(uint)combo.Modifiers << 32);
+                    PInvoke.PostMessage(self._hwnd, WM_APP_HOTKEY_FIRED, 0, packed);
+                    return new LRESULT(1); // swallow -- keeps it from reaching Explorer/the focused app
+                }
+            }
+            else if ((wParam.Value == PInvoke.WM_KEYUP || wParam.Value == PInvoke.WM_SYSKEYUP) && self._winKeyDisguisePending
+                && (data->vkCode == (uint)VIRTUAL_KEY.VK_LWIN || data->vkCode == (uint)VIRTUAL_KEY.VK_RWIN))
+            {
+                self._winKeyDisguisePending = false;
+                DisguiseWinKeyUp((VIRTUAL_KEY)data->vkCode);
+                return new LRESULT(1); // swallow the real key-up; a synthetic one follows the disguise tap below
             }
         }
         return PInvoke.CallNextHookEx(HHOOK.Null, nCode, wParam, lParam);
     }
+
+    /// <summary>
+    /// Windows opens the Start Menu whenever a bare Win press+release completes without the
+    /// shell ever seeing another key go down alongside it. Since the hook above swallows the
+    /// hotkey's own key (e.g. the "Q" in Win+Q) before it reaches Explorer's own keyboard hook,
+    /// Explorer never learns Win was combined with anything -- so releasing Win right after the
+    /// hotkey fires looks, to the shell, exactly like a bare Win tap, and the Start Menu pops
+    /// open. AutoHotkey hits the same problem and fixes it the same way: swallow the real Win-up,
+    /// inject a harmless Ctrl tap so Explorer's hook sees "something else was pressed", then
+    /// inject the Win-up itself so the rest of the system still sees Win go up normally.
+    /// </summary>
+    private static unsafe void DisguiseWinKeyUp(VIRTUAL_KEY winKey)
+    {
+        Span<INPUT> inputs =
+        [
+            KeyInput(VIRTUAL_KEY.VK_CONTROL, down: true),
+            KeyInput(VIRTUAL_KEY.VK_CONTROL, down: false),
+            KeyInput(winKey, down: false),
+        ];
+        PInvoke.SendInput(inputs, sizeof(INPUT));
+    }
+
+    private static INPUT KeyInput(VIRTUAL_KEY vk, bool down) => new()
+    {
+        type = INPUT_TYPE.INPUT_KEYBOARD,
+        Anonymous = new INPUT._Anonymous_e__Union
+        {
+            ki = new KEYBDINPUT
+            {
+                wVk = vk,
+                dwFlags = down ? 0 : KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP,
+            },
+        },
+    };
 
     private static HotkeyModifiers CurrentModifiers()
     {

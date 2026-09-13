@@ -161,7 +161,7 @@ hotkeys:
     args: ["-1"]
   - keys: "Win+T"
     command: set-layout
-    args: ["master-stack-right"]
+    args: ["master-stack"]
   - keys: "Win+M"
     command: set-layout
     args: ["monocle"]
