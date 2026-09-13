@@ -107,6 +107,7 @@ while (true)
 if (manager.RememberLayout)
     WindowStateStore.Save(statePath, manager.CaptureState());
 
+manager.RestoreAllWindows(); // give windows on other tags back before we stop managing them
 manager.SetHideTitlebars(false); // give windows their decorations back before we stop managing them
 
 foreach (BarWindow bar in bars)
