@@ -13,6 +13,9 @@ isn't an option.
 
 ![Wtile status bar and tiled windows](docs/screenshot.png)
 
+![dmenu-style app launcher](docs/screenshots/app-launcher.png)
+
+
 ## Status
 
 Actively developed, not yet a 1.0. Expect rough edges.
@@ -42,7 +45,6 @@ Actively developed, not yet a 1.0. Expect rough edges.
 - Optional **taskbar hiding** and **title-bar/border stripping** per window, for a cleaner,
   fully tiled look.
 
-![dmenu-style app launcher](docs/screenshots/app-launcher.png)
 
 ## Download
 
