@@ -109,6 +109,7 @@ if (manager.RememberLayout)
 
 manager.RestoreAllWindows(); // give windows on other tags back before we stop managing them
 manager.SetHideTitlebars(false); // give windows their decorations back before we stop managing them
+TaskbarController.SetVisible(true); // give the real taskbar back before we stop managing it
 
 foreach (BarWindow bar in bars)
     bar.Dispose();
