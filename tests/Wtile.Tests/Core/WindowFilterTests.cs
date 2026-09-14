@@ -48,11 +48,23 @@ public class WindowFilterTests
     [InlineData("WorkerW")]
     [InlineData("Worker Window")]
     [InlineData("Windows.UI.Core.CoreWindow")]
+    [InlineData("ApplicationFrameWindow")]
     [InlineData("tooltips_class32")]
     [InlineData("NativeHWNDHost")]
+    [InlineData("#32770")]
     public void KnownShellClasses_AreNotManageable(string className)
     {
         var w = NormalApp(className);
+        Assert.False(WindowFilter.IsManageable(w));
+    }
+
+    [Fact]
+    public void RunDialog_IsNotManageable()
+    {
+        // The Run dialog (#32770) has an owner but sets WS_EX_APPWINDOW anyway, purely to force
+        // its own taskbar button -- it should stay excluded despite the owner+AppWindow opt-in
+        // that would otherwise let an owned window back into tiling.
+        var w = NormalApp("#32770", "Run") with { HasOwner = true, IsAppWindow = true };
         Assert.False(WindowFilter.IsManageable(w));
     }
 

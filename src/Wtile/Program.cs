@@ -18,6 +18,13 @@ using Wtile.Core;
 using Wtile.Hotkeys;
 using Wtile.Layouts;
 
+// Wtile is a Windows-subsystem exe (see OutputType in Wtile.csproj) so launching it from Explorer,
+// a shortcut, or Startup never flashes a console -- but that also means Console.WriteLine below
+// silently goes nowhere by default. Attaching to an already-running parent console (i.e. we were
+// launched from a terminal, as with `-v` below) restores that output there without ever creating
+// a console of our own.
+PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
+
 // Checked before anything else (no hooks/COM/windows touched yet) so `-v`/`--version` is a cheap,
 // side-effect-free way to prove which build an exe at some install path actually is -- see
 // GenerateBuildInfo in Wtile.csproj for how GitCommit/BuildTimeUtc get embedded at build time.
@@ -80,6 +87,8 @@ hotkeys.ApplyBindings(initial.Config.Hotkeys);
 var applier = new ConfigApplier(manager, bars, hotkeys, focusBorder);
 commands.Register(new ReloadCommand(configPath, applier, bars, manager, statePath));
 
+using var tray = new TrayIcon(commands);
+
 manager.Seed();
 if (manager.RememberLayout && WindowStateStore.TryLoad(statePath, out SavedState savedState))
     manager.ApplySavedState(savedState);
@@ -98,6 +107,7 @@ while (true)
 if (manager.RememberLayout)
     WindowStateStore.Save(statePath, manager.CaptureState());
 
+manager.RestoreAllWindows(); // give windows on other tags back before we stop managing them
 manager.SetHideTitlebars(false); // give windows their decorations back before we stop managing them
 
 foreach (BarWindow bar in bars)

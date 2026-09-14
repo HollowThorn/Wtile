@@ -142,6 +142,17 @@ internal sealed unsafe class WindowManager
         Arrange(); // window rects need re-sending: the frame changed, so invisible-border insets did too
     }
 
+    /// <summary>Called once at shutdown: makes every window Wtile is currently hiding for a tag
+    /// switch (any tag other than the one being viewed on its monitor, minus pinned windows)
+    /// visible again. Without this, quitting while sat on tag 2 leaves every window on tags 1 and
+    /// 3-9 invisible with no way back short of relaunching Wtile to switch to their tag.</summary>
+    public void RestoreAllWindows()
+    {
+        foreach (HWND handle in _selfHidden)
+            PInvoke.ShowWindow(handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+        _selfHidden.Clear();
+    }
+
     /// <summary>Legacy console host windows (cmd.exe/powershell.exe under conhost.exe, class
     /// "ConsoleWindowClass" -- not Windows Terminal, which is a normal window) compute their
     /// buffer/window size relative to their own non-client frame internally; stripping
@@ -438,18 +449,20 @@ internal sealed unsafe class WindowManager
         }
     }
 
-    /// <summary>Moves focus to the next/previous tiled window in stack order (dwm's focusstack), on the current monitor.</summary>
+    /// <summary>Moves focus to the next/previous window in stack order (dwm's focusstack), on the
+    /// current monitor -- tiled and floating alike, same as dwm/bug.n/MangoWM: floating a window
+    /// takes it out of the tiling, not out of the focus cycle.</summary>
     public void FocusNext() => FocusRelative(+1);
     public void FocusPrev() => FocusRelative(-1);
 
     private void FocusRelative(int direction)
     {
-        List<ManagedWindow> tiled = TiledWindowsOnCurrentMonitor();
-        if (tiled.Count == 0)
+        List<ManagedWindow> visible = VisibleWindowsOnCurrentMonitor();
+        if (visible.Count == 0)
             return;
-        int currentIndex = tiled.FindIndex(w => w.Handle == FocusedHandle);
-        int nextIndex = currentIndex < 0 ? 0 : ((currentIndex + direction) % tiled.Count + tiled.Count) % tiled.Count;
-        WindowInspector.ForceSetForegroundWindow(tiled[nextIndex].Handle);
+        int currentIndex = visible.FindIndex(w => w.Handle == FocusedHandle);
+        int nextIndex = currentIndex < 0 ? 0 : ((currentIndex + direction) % visible.Count + visible.Count) % visible.Count;
+        WindowInspector.ForceSetForegroundWindow(visible[nextIndex].Handle);
     }
 
     /// <summary>dwm's zoom: master swaps with the next window; anything else becomes the new master.</summary>
@@ -628,6 +641,9 @@ internal sealed unsafe class WindowManager
 
     private List<ManagedWindow> TiledWindowsOn(Monitor monitor, int monitorIndex) =>
         _windows.FindAll(w => IsVisibleOn(w, monitor, monitorIndex) && !w.IsMinimized && !w.IsFloating && !WindowInspector.IsCloaked(w.Handle));
+
+    private List<ManagedWindow> VisibleWindowsOnCurrentMonitor() =>
+        _windows.FindAll(w => IsVisibleOn(w, CurrentMonitor, CurrentMonitorIndex) && !w.IsMinimized && !WindowInspector.IsCloaked(w.Handle));
 
     /// <summary>True if this window is currently supposed to be visible on this specific monitor:
     /// on its active tag, pinned (bug.n's "pin" -- visible/tiled on every tag regardless of its

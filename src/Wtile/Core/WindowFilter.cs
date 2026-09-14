@@ -32,6 +32,9 @@ public static class WindowFilter
                          // (e.g. a VM resizing the guest's resolution), briefly appearing as a
                          // plain untitled top-level window before Explorer re-parents/cloaks it
         "Windows.UI.Core.CoreWindow",
+        "ApplicationFrameWindow", // UWP app host (Settings, Calculator, Photos, Mail, Maps, ...) --
+                                  // bug.n leaves these untiled by default too; the host resizes its
+                                  // inner CoreWindow on its own schedule, fighting external WinAPI resizes
         "MultitaskingViewFrame",
         "XamlExplorerHostIslandWindow",
         "ApplicationManager_DesktopShellWindow",
@@ -39,6 +42,11 @@ public static class WindowFilter
         "tooltips_class32",
         "IME",
         "NativeHWNDHost", // legacy volume/brightness OSD flyout host (stable since Vista)
+        "#32770", // generic Windows dialog-box template (Run, Open/Save, message boxes, property
+                  // sheets, ...) -- almost always excluded already via HasOwner below, but a few
+                  // (e.g. the Run dialog) deliberately set WS_EX_APPWINDOW despite having an owner
+                  // just to force their own taskbar button, which otherwise opts them back into
+                  // tiling. bug.n never tiles these either (they're WS_POPUP by construction).
     };
 
     public static bool IsManageable(in WindowSnapshot window)

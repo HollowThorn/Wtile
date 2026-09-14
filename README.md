@@ -2,10 +2,14 @@
 
 A dynamic tiling window manager for Windows.
 
-Wtile brings dynamic tiling, tags, and a keyboard-driven workflow — the model popularized by
-[dwm](https://dwm.suckless.org/) on X11 and proven viable on Win32 by [bug.n](https://github.com/fuhsjr00/bug.n)
-— to Windows 10/11. It's written in C# on .NET with NativeAOT (a real native `.exe`, no runtime to
-install, no JIT warmup), built for environments where switching operating systems isn't an option.
+Wtile's goal is a dwm-like tiling manager for Windows: as lightweight and as fast as the Win32 API
+allows, with no compromise made purely for portability. It brings dynamic tiling, tags, and a
+keyboard-driven workflow — the model popularized by [dwm](https://dwm.suckless.org/) on X11 and
+proven viable on Win32 by [bug.n](https://github.com/fuhsjr00/bug.n) — to Windows 10/11. It's
+written in C# on .NET with NativeAOT (a real native `.exe`, no runtime to install, no JIT warmup)
+and talks to the OS directly through Win32 (via [CsWin32](https://github.com/microsoft/CsWin32),
+not a cross-platform abstraction layer), built for environments where switching operating systems
+isn't an option.
 
 ![Wtile status bar and tiled windows](docs/screenshot.png)
 

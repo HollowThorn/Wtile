@@ -35,14 +35,14 @@ general:
 # every window and is rejected with a warning instead. Only affects windows opened after the next
 # "reload" -- it won't retroactively untile something already being managed.
 #
-# Common shell popups (the volume/brightness OSD, etc.) are already excluded automatically and
-# don't need an entry here -- this is for anything else you want to keep floating/untiled. Use
-# the "inspect-window" hotkey (Win+Shift+I below) to print the focused window's exact process/
-# class/title so you don't have to guess. Example:
+# Common shell popups (the volume/brightness OSD, etc.) and generic dialog boxes (Run, Open/Save,
+# message boxes, "#32770") are already excluded automatically and don't need an entry here --
+# this is for anything else you want to keep floating/untiled. Use the "inspect-window" hotkey
+# (Win+Shift+I below) to print the focused window's exact process/class/title so you don't have
+# to guess. Example:
 # blacklist:
 #   - processName: "^steam\\.exe$"
 #     title: "Friends List"
-#   - className: "^#32770$"       # generic Windows dialog box class
 
 layouts:
   # Every tag starts on master-stack with these params (see hotkeys --- layout --- below for how
@@ -161,7 +161,7 @@ hotkeys:
     args: ["-1"]
   - keys: "Win+T"
     command: set-layout
-    args: ["master-stack-right"]
+    args: ["master-stack"]
   - keys: "Win+M"
     command: set-layout
     args: ["monocle"]
