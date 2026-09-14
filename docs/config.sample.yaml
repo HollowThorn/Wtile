@@ -122,7 +122,7 @@ hotkeys:
     args: ["wt.exe"]
   - keys: "Win+E"
     command: spawn
-    args: ["chrome.exe"]
+    args: ["firefox.exe"]
 
   # --- focus / window ---
   - keys: "Win+J"
