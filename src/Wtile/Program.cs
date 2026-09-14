@@ -16,6 +16,7 @@ using Wtile.Commands;
 using Wtile.Config;
 using Wtile.Core;
 using Wtile.Hotkeys;
+using Wtile.Launcher;
 using Wtile.Layouts;
 
 // Wtile is a Windows-subsystem exe (see OutputType in Wtile.csproj) so launching it from Explorer,
@@ -84,7 +85,10 @@ using var focusBorder = new FocusBorderWindow(manager, initial.Config.General.Fo
 using var hotkeys = new HotkeyManager(commands);
 hotkeys.ApplyBindings(initial.Config.Hotkeys);
 
-var applier = new ConfigApplier(manager, bars, hotkeys, focusBorder);
+using var launcher = new LauncherWindow(manager, initial.Config.Bar);
+commands.Register(new AppLauncherCommand(launcher));
+
+var applier = new ConfigApplier(manager, bars, hotkeys, focusBorder, launcher);
 commands.Register(new ReloadCommand(configPath, applier, bars, manager, statePath));
 
 using var tray = new TrayIcon(commands);
@@ -109,6 +113,7 @@ if (manager.RememberLayout)
 
 manager.RestoreAllWindows(); // give windows on other tags back before we stop managing them
 manager.SetHideTitlebars(false); // give windows their decorations back before we stop managing them
+TaskbarController.SetVisible(true); // give the real taskbar back before we stop managing it
 
 foreach (BarWindow bar in bars)
     bar.Dispose();

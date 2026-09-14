@@ -153,7 +153,7 @@ internal static unsafe class WindowInspector
 
     /// <summary>
     /// Adds/removes WS_CAPTION and WS_THICKFRAME so the window is drawn without a title bar or
-    /// resize border -- same trick GlazeWM/komorebi use. SWP_FRAMECHANGED is required for DWM to
+    /// resize border. SWP_FRAMECHANGED is required for DWM to
     /// actually recompute the non-client area; without it the style bits change but the window
     /// keeps rendering its old frame. <paramref name="originalStyle"/> should be the style
     /// captured via <see cref="GetStyle"/> before ever hiding it, so restoring (hidden: false)

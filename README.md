@@ -34,10 +34,15 @@ Actively developed, not yet a 1.0. Expect rough edges.
   the way dwm/bug.n users expect.
 - **bug.n-style window pinning** (stay visible across every tag switch) and dwm-style "view all
   tags" (`view(~0)`).
+- **dmenu-style app launcher** (`Win+Escape` by default): a fuzzy-filterable popup flush against
+  the bar, listing PATH executables and Start Menu shortcuts — type to filter, arrow/Tab to pick,
+  Enter to launch.
 - **Fully configurable via YAML**, hot-reloadable with a single hotkey (no background file
   watcher — you press reload after editing, or after changing monitor setup).
 - Optional **taskbar hiding** and **title-bar/border stripping** per window, for a cleaner,
   fully tiled look.
+
+![dmenu-style app launcher](docs/screenshots/app-launcher.png)
 
 ## Download
 

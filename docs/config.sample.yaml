@@ -122,7 +122,16 @@ hotkeys:
     args: ["wt.exe"]
   - keys: "Win+E"
     command: spawn
-    args: ["chrome.exe"]
+    args: ["firefox.exe"]
+
+  # --- launcher ---
+  # dmenu-style app launcher: a single fuzzy-filterable line that appears flush against the bar
+  # (below a top bar, above a bottom bar), listing PATH executables and Start Menu shortcuts.
+  # Type to filter, Tab/Right/Left to change the highlighted match, Enter to launch it, Escape (or
+  # clicking away) to dismiss without launching. Escape is unbound everywhere else by default, so
+  # this is safe out of the box.
+  - keys: "Win+Escape"
+    command: app-launcher
 
   # --- focus / window ---
   - keys: "Win+J"
