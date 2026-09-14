@@ -4,6 +4,7 @@ using Windows.Win32.Foundation;
 using Wtile.Bar;
 using Wtile.Config;
 using Wtile.Core;
+using Wtile.Launcher;
 
 namespace Wtile.Commands;
 
@@ -291,6 +292,15 @@ internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IR
 
         Console.WriteLine("[reload] Done.");
     }
+}
+
+/// <summary>Toggles the dmenu-style app launcher popup (PATH executables + Start Menu shortcuts,
+/// fuzzy-filtered). Registered separately in Program.cs (not CreateDefault below), same reason as
+/// ReloadCommand: needs LauncherWindow, which is constructed after the initial CommandRegistry.</summary>
+internal sealed class AppLauncherCommand(LauncherWindow launcher) : ICommand
+{
+    public string Name => "app-launcher";
+    public void Execute(IReadOnlyList<string> args) => launcher.Toggle();
 }
 
 internal static class BuiltinCommands

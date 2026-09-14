@@ -1,6 +1,7 @@
 using Wtile.Bar;
 using Wtile.Core;
 using Wtile.Hotkeys;
+using Wtile.Launcher;
 
 namespace Wtile.Config;
 
@@ -8,7 +9,7 @@ namespace Wtile.Config;
 /// run on the main thread. Bar config (colors/font/segments) is shared config applied to every
 /// monitor's bar identically -- matching the tag/layout config, which is also shared but then
 /// diverges independently per monitor at runtime.</summary>
-internal sealed class ConfigApplier(WindowManager manager, IReadOnlyList<BarWindow> bars, HotkeyManager hotkeys, FocusBorderWindow focusBorder)
+internal sealed class ConfigApplier(WindowManager manager, IReadOnlyList<BarWindow> bars, HotkeyManager hotkeys, FocusBorderWindow focusBorder, LauncherWindow launcher)
 {
     public void Apply(WtileConfig config)
     {
@@ -31,6 +32,7 @@ internal sealed class ConfigApplier(WindowManager manager, IReadOnlyList<BarWind
         focusBorder.ApplyConfig(config.General);
         foreach (BarWindow bar in bars)
             bar.ApplyConfig(config.Bar);
+        launcher.ApplyConfig(config.Bar);
         hotkeys.ApplyBindings(config.Hotkeys);
     }
 }
