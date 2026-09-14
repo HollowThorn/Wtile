@@ -1,0 +1,55 @@
+name: Dev Build
+
+# Builds a self-contained win-x64 binary from the tip of main and republishes it to a rolling
+# "dev" pre-release, so anyone can grab the latest in-development build at a stable URL without
+# waiting for a tagged release: https://github.com/<owner>/<repo>/releases/tag/dev
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Two merges landing close together shouldn't race to move the same tag/release.
+concurrency:
+  group: dev-build
+  cancel-in-progress: true
+
+jobs:
+  build-and-publish-dev:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore Wtile.slnx
+
+      - name: Test
+        run: dotnet test tests/Wtile.Tests/Wtile.Tests.csproj -c Release
+
+      - name: Publish (NativeAOT, self-contained win-x64)
+        run: dotnet publish src/Wtile/Wtile.csproj -c Release -r win-x64 --self-contained -o publish
+
+      - name: Zip
+        run: Compress-Archive -Path publish/* -DestinationPath Wtile-win-x64-dev.zip
+
+      - name: Move dev tag to this commit
+        run: |
+          git tag -f dev
+          git push origin dev --force
+
+      - name: Update dev pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev
+          name: "Development build"
+          body: |
+            Automated build from the latest `main` (${{ github.sha }}).
+            This is not a stable release -- grab a tagged release from the Releases page for that.
+          prerelease: true
+          files: Wtile-win-x64-dev.zip
