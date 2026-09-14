@@ -14,8 +14,8 @@ namespace Wtile.Hotkeys;
 /// RegisterHotKey. Windows reserves nearly the entire bare Win+&lt;key&gt; namespace for the
 /// shell (Explorer registers it first at boot), so RegisterHotKey fails for almost all of them
 /// -- a low-level hook intercepts the keystroke before Explorer's own hotkey table ever sees
-/// it, sidestepping the conflict entirely. This is the same technique AutoHotkey (and bug.n,
-/// which is built on it) uses. A small number of OS-hardened sequences are immune to *any*
+/// it, sidestepping the conflict entirely. This is the same technique bug.n uses. A small number
+/// of OS-hardened sequences are immune to *any*
 /// hook, hardcoded below Explorer and even below other hooks: Win+L (lock workstation) and
 /// Ctrl+Alt+Delete (the Secure Attention Sequence) -- expect those two to never be bindable.
 ///
@@ -115,9 +115,9 @@ internal sealed unsafe class HotkeyManager : IDisposable
     /// hotkey's own key (e.g. the "Q" in Win+Q) before it reaches Explorer's own keyboard hook,
     /// Explorer never learns Win was combined with anything -- so releasing Win right after the
     /// hotkey fires looks, to the shell, exactly like a bare Win tap, and the Start Menu pops
-    /// open. AutoHotkey hits the same problem and fixes it the same way: swallow the real Win-up,
-    /// inject a harmless Ctrl tap so Explorer's hook sees "something else was pressed", then
-    /// inject the Win-up itself so the rest of the system still sees Win go up normally.
+    /// open. The fix: swallow the real Win-up, inject a harmless Ctrl tap so Explorer's hook sees
+    /// "something else was pressed", then inject the Win-up itself so the rest of the system
+    /// still sees Win go up normally.
     /// </summary>
     private static unsafe void DisguiseWinKeyUp(VIRTUAL_KEY winKey)
     {

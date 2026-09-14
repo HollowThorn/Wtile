@@ -1,7 +1,7 @@
 namespace Wtile.Launcher;
 
 /// <summary>
-/// dmenu/rofi-style fuzzy matching: the query must appear as a (case-insensitive) subsequence of
+/// dmenu-style fuzzy matching: the query must appear as a (case-insensitive) subsequence of
 /// the candidate, in order but not necessarily contiguous -- "ffx" matches "FireFoX.exe". Scoring
 /// rewards matches that start earlier in the candidate and run together, so "ff" ranks
 /// "firefox.exe" (prefix, contiguous) above "coreflow.exe" (scattered) for the same query.
