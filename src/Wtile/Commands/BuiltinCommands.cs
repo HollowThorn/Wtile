@@ -247,7 +247,7 @@ internal sealed class ToggleTaskbarCommand(WindowManager manager) : ICommand
 }
 
 /// <summary>Prints the focused window's process/class/title to the console -- lets you copy exact
-/// values straight into a blacklist: rule instead of guessing or reaching for Spy++.</summary>
+/// values straight into a blacklist: or tagRules: rule instead of guessing or reaching for Spy++.</summary>
 internal sealed class InspectWindowCommand : ICommand
 {
     public string Name => "inspect-window";
