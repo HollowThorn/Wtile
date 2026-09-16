@@ -149,6 +149,11 @@ public static class ConfigLoader
                 warnings.Add($"tagRules entry has tag {rule.Tag}, outside 1..{config.General.TagCount} (general.tagCount); ignored.");
                 continue;
             }
+            if (rule.Monitor < 0)
+            {
+                warnings.Add($"tagRules entry has monitor {rule.Monitor}; must be 1 or higher (or omitted); ignored.");
+                continue;
+            }
             if (IsValidPattern(rule.ProcessName, "tagRules", "processName", warnings)
                 && IsValidPattern(rule.ClassName, "tagRules", "className", warnings)
                 && IsValidPattern(rule.Title, "tagRules", "title", warnings))

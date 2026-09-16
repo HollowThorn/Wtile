@@ -215,6 +215,7 @@ public class ConfigLoaderTests
                 tag: 2
                 follow: true
               - className: "CASCADIA_HOSTING_WINDOW_CLASS"
+                monitor: 2
                 tag: 3
             """;
 
@@ -224,10 +225,28 @@ public class ConfigLoaderTests
         Assert.Equal(2, result.Config.TagRules.Count);
         Assert.Equal("^firefox\\.exe$", result.Config.TagRules[0].ProcessName);
         Assert.Equal(2, result.Config.TagRules[0].Tag);
+        Assert.Equal(0, result.Config.TagRules[0].Monitor);
         Assert.True(result.Config.TagRules[0].Follow);
         Assert.Equal("CASCADIA_HOSTING_WINDOW_CLASS", result.Config.TagRules[1].ClassName);
         Assert.Equal(3, result.Config.TagRules[1].Tag);
+        Assert.Equal(2, result.Config.TagRules[1].Monitor);
         Assert.False(result.Config.TagRules[1].Follow);
+    }
+
+    [Fact]
+    public void NegativeTagRuleMonitor_IsDroppedWithWarning()
+    {
+        const string yaml = """
+            tagRules:
+              - processName: "firefox"
+                tag: 1
+                monitor: -1
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Config.TagRules);
+        Assert.Contains(result.Warnings, w => w.Contains("monitor -1"));
     }
 
     [Theory]

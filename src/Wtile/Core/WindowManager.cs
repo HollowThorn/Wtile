@@ -280,10 +280,10 @@ internal sealed unsafe class WindowManager
     /// class (title excluded -- it churns, e.g. browser tabs): saved windows are matched in saved
     /// order, FIFO, against not-yet-claimed live windows; an unmatched saved record is dropped,
     /// and a live window with no matching record just keeps whatever placement Seed()/TryAdd
-    /// already gave it. A live window that matches a tag rule is never touched by saved state at
-    /// all -- config wins over state.json (see TagRule), and checking here rather than when
-    /// saving means a rule added between quit and the next launch still wins over the record
-    /// written before it existed. Called at startup and from ReloadCommand -- never on the hot
+    /// already gave it -- for a window that matched a tag rule in TryAdd that means the rule's
+    /// placement, so rules are the fallback for a window with no record while state.json wins
+    /// for one that has one: state is about windows already open, rules about where a window
+    /// *opens* (see TagRule). Called at startup and from ReloadCommand -- never on the hot
     /// path.</summary>
     public void ApplySavedState(SavedState state)
     {
@@ -303,17 +303,6 @@ internal sealed unsafe class WindowManager
             liveProcessNames[w.Handle] = processName;
         }
 
-        // Placed by config in TryAdd; keep state.json's hands off these. Tracked separately from
-        // `claimed` (not folded into it) so the unclaimed-windows pass at the end still carries
-        // them over into the rebuilt list -- dropping them there would leave a hidden one (say,
-        // on a non-active tag) invisible and untracked, with no event ever bringing it back.
-        var ruled = new HashSet<HWND>();
-        foreach (ManagedWindow w in _windows)
-        {
-            if (WindowTagRules.TryResolve(_tagRules, liveProcessNames[w.Handle], w.ClassName, w.Title, out _))
-                ruled.Add(w.Handle);
-        }
-
         var claimed = new HashSet<HWND>();
         var restored = new List<ManagedWindow>();
         foreach (SavedWindowState saved in state.Windows)
@@ -322,7 +311,7 @@ internal sealed unsafe class WindowManager
                 continue; // never matches -- avoids false positives between two access-denied windows
 
             ManagedWindow? match = _windows.Find(w =>
-                !claimed.Contains(w.Handle) && !ruled.Contains(w.Handle) && w.ClassName == saved.ClassName && liveProcessNames[w.Handle] == saved.ProcessName);
+                !claimed.Contains(w.Handle) && w.ClassName == saved.ClassName && liveProcessNames[w.Handle] == saved.ProcessName);
             if (match is null)
                 continue;
 
@@ -869,15 +858,21 @@ internal sealed unsafe class WindowManager
             return;
         }
 
-        int monitorIndex = ResolveMonitorIndex(hwnd);
-        Monitor monitor = _monitors[monitorIndex];
-
         CompiledTagRule? tagRule = null;
         if (_tagRules.Count > 0 && WindowTagRules.TryResolve(_tagRules, processName, snapshot.ClassName, snapshot.Title, out CompiledTagRule matched))
         {
             tagRule = matched;
-            Console.WriteLine($"[tag-rule] '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}') -> tag {matched.TagIndex + 1}");
+            Console.WriteLine($"[tag-rule] '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}') -> "
+                + (matched.MonitorIndex is int m ? $"monitor {m + 1} " : "") + $"tag {matched.TagIndex + 1}");
         }
+
+        // A rule's monitor is clamped rather than rejected (same as a saved monitor index in
+        // ApplySavedState): the config can't know the monitor count, and "monitor 2" on a
+        // laptop that's currently undocked should mean the one screen there is, not nothing.
+        int monitorIndex = tagRule?.MonitorIndex is int ruleMonitor
+            ? Math.Clamp(ruleMonitor, 0, _monitors.Count - 1)
+            : ResolveMonitorIndex(hwnd);
+        Monitor monitor = _monitors[monitorIndex];
 
         var window = new ManagedWindow(hwnd)
         {
@@ -894,7 +889,9 @@ internal sealed unsafe class WindowManager
 
         if (tagRule is not null && !IsVisibleOn(window, monitor, monitorIndex))
         {
-            // The rule put it on a tag other than the one being viewed on its monitor. Follow
+            // The rule put it on a tag other than the one being viewed on its monitor (a
+            // rule-chosen monitor needs no extra handling: a window is only ever positioned by
+            // Arrange, which lays it out on whatever monitor MonitorIndex says). Follow
             // only on a live show event (arrange: true) -- never during Seed() at startup, where
             // every pre-existing mapped window would otherwise flip the view in turn (and any
             // remembered active tag gets applied right after anyway). ActivateTag does the rest:

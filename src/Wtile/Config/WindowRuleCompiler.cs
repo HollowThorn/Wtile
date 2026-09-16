@@ -27,6 +27,7 @@ internal static class WindowRuleCompiler
             {
                 Match = Compile(rule.ProcessName, rule.ClassName, rule.Title),
                 TagIndex = rule.Tag - 1, // config is 1-based like the view-tag hotkeys; Core is 0-based
+                MonitorIndex = rule.Monitor == 0 ? null : rule.Monitor - 1,
                 Follow = rule.Follow,
             });
         }
