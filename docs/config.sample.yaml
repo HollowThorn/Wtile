@@ -65,6 +65,11 @@ bar:
   fontFamily: "Segoe UI"
   fontSize: 10
   position: top # top | bottom
+  # How the tags segment marks an occupied-but-not-active tag -- the two are mutually exclusive,
+  # never both at once:
+  #   marker     (default) dwm's small corner square, normal text, no background fill.
+  #   background fills the whole pill with colors.occupiedTag below, no marker square.
+  occupiedTagIndicator: marker # marker | background
   segments:
     left: [tags, layout-symbol, window-title]
     # cpu/memory/battery/network/volume are slstatus-style system-stat modules -- battery renders
@@ -78,6 +83,10 @@ bar:
     foreground: "#cdd6f4"
     activeTag: "#89b4fa"
     urgentTag: "#f38ba8"
+    # occupiedTag: background for an occupied-but-not-active tag pill -- only drawn when
+    # occupiedTagIndicator above is "background". Left unset (default), it's derived from
+    # background/foreground so it stays readable against either.
+    # occupiedTag: "#45475a"
   # Optional per-module format-string overrides for the system-stat segments above. Omit a
   # module here (or leave format: "") to use its built-in default shown below. {N} placeholders
   # are positional (string.Format-style) -- a malformed format string falls back to the default
@@ -279,7 +288,11 @@ hotkeys:
   - keys: "Win+Space"              # hides the real Windows taskbar entirely (not Windows' own
     command: toggle-taskbar        # auto-hide, which still peeks out on mouse-hover at the edge)
                                     # and reclaims its space for tiling.
-  - keys: "Win+Shift+Space"        # hides Wtile's own bar on every monitor (dwm/bug.n-style) and
+  # Not Win+Shift+Space: Windows reserves that (and Win+Space alone) for its own input
+  # language/keyboard layout switcher below the normal hook layer -- same class of unhookable
+  # OS-hardcoded combo as Win+L (see HotkeyManager.cs) -- so it can win the race and pop up the
+  # layout switcher instead of toggling the bar.
+  - keys: "Win+Shift+B"            # hides Wtile's own bar on every monitor (dwm/bug.n-style) and
     command: toggle-bar            # reclaims its space for tiling.
 
   # --- debug ---

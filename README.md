@@ -44,6 +44,9 @@ Actively developed, not yet a 1.0. Expect rough edges.
   watcher — you press reload after editing, or after changing monitor setup).
 - Optional **taskbar hiding** and **title-bar/border stripping** per window, for a cleaner,
   fully tiled look.
+- Optional **session persistence** (`rememberState`): remembers which monitor/tag each window was
+  on, plus its floating/pinned state, across quit/restart and "reload" — matched back to reopened
+  windows by process name + window class.
 
 
 ## Download

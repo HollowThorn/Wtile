@@ -14,6 +14,7 @@ internal sealed class BarTheme
     public Color Foreground { get; private set; }
     public Color ActiveTag { get; private set; }
     public Color UrgentTag { get; private set; }
+    public Color InactiveTagBackground { get; private set; }
     public Color EmptyTagForeground { get; private set; }
 
     public BarTheme(BarColorsConfig config) => Apply(config);
@@ -24,6 +25,10 @@ internal sealed class BarTheme
         Foreground = ParseOr(config.Foreground, ColorTranslator.FromHtml("#cdd6f4"));
         ActiveTag = ParseOr(config.ActiveTag, ColorTranslator.FromHtml("#89b4fa"));
         UrgentTag = ParseOr(config.UrgentTag, ColorTranslator.FromHtml("#f38ba8"));
+        // occupiedTag defaults to "" (empty), which ParseOr treats as "use the fallback" -- a
+        // derived blend that stays readable against whatever background/foreground is picked.
+        // Only actually drawn when bar.occupiedTagIndicator is "background" (see TagsSegment).
+        InactiveTagBackground = ParseOr(config.OccupiedTag, Blend(Background, Foreground, 0.15));
         EmptyTagForeground = Blend(Foreground, Background, 0.5);
     }
 

@@ -154,17 +154,17 @@ internal sealed unsafe class BarWindow : IDisposable
     private void RebuildSegments(BarConfig config)
     {
         _renderer = new BarRenderer(
-            BuildSegments(config.Segments.Left, config.Modules),
-            BuildSegments(config.Segments.Right, config.Modules),
+            BuildSegments(config.Segments.Left, config),
+            BuildSegments(config.Segments.Right, config),
             _theme);
     }
 
-    private ISegment[] BuildSegments(IEnumerable<string> names, List<BarModuleConfig> modules)
+    private ISegment[] BuildSegments(IEnumerable<string> names, BarConfig config)
     {
         var result = new List<ISegment>();
         foreach (string name in names)
         {
-            ISegment? segment = CreateSegment(name, modules);
+            ISegment? segment = CreateSegment(name, config);
             if (segment is not null)
                 result.Add(segment);
             else
@@ -173,17 +173,17 @@ internal sealed unsafe class BarWindow : IDisposable
         return [.. result];
     }
 
-    private ISegment? CreateSegment(string name, List<BarModuleConfig> modules) => name switch
+    private ISegment? CreateSegment(string name, BarConfig config) => name switch
     {
-        "tags" => new TagsSegment(_manager, _commands, _theme, _monitorIndex),
+        "tags" => new TagsSegment(_manager, _commands, _theme, _monitorIndex, config.OccupiedTagIndicator == "background"),
         "layout-symbol" => new LayoutSymbolSegment(_manager, _theme, _monitorIndex),
         "window-title" => new TitleSegment(_manager, _theme),
         "clock" => new ClockSegment(_theme),
-        "cpu" => new CpuSegment(_theme, FormatFor(modules, "cpu")),
-        "memory" => new MemorySegment(_theme, FormatFor(modules, "memory")),
-        "battery" => new BatterySegment(_theme, FormatFor(modules, "battery")),
-        "network" => new NetworkSegment(_theme, FormatFor(modules, "network")),
-        "volume" => new VolumeSegment(_theme, FormatFor(modules, "volume")),
+        "cpu" => new CpuSegment(_theme, FormatFor(config.Modules, "cpu")),
+        "memory" => new MemorySegment(_theme, FormatFor(config.Modules, "memory")),
+        "battery" => new BatterySegment(_theme, FormatFor(config.Modules, "battery")),
+        "network" => new NetworkSegment(_theme, FormatFor(config.Modules, "network")),
+        "volume" => new VolumeSegment(_theme, FormatFor(config.Modules, "volume")),
         _ => null,
     };
 

@@ -62,6 +62,12 @@ public sealed class BarConfig
     public string FontFamily { get; set; } = "Segoe UI";
     public double FontSize { get; set; } = 10;
     public string Position { get; set; } = "top"; // "top" | "bottom"
+
+    /// <summary>How the tags segment marks an occupied-but-not-active tag: "marker" (default,
+    /// dwm-style small corner square, no background fill) or "background" (fills the whole pill
+    /// with <see cref="BarColorsConfig.OccupiedTag"/> instead, no marker -- the two are mutually
+    /// exclusive, never both at once). An unrecognized value falls back to "marker".</summary>
+    public string OccupiedTagIndicator { get; set; } = "marker"; // "marker" | "background"
     public BarSegmentsConfig Segments { get; set; } = new();
     public BarColorsConfig Colors { get; set; } = new();
 
@@ -94,6 +100,11 @@ public sealed class BarColorsConfig
     public string Foreground { get; set; } = "#cdd6f4";
     public string ActiveTag { get; set; } = "#89b4fa";
     public string UrgentTag { get; set; } = "#f38ba8";
+
+    /// <summary>Background for an occupied-but-not-active tag pill -- only drawn when
+    /// <see cref="BarConfig.OccupiedTagIndicator"/> is "background". Empty (the default) means
+    /// "derive one from background/foreground".</summary>
+    public string OccupiedTag { get; set; } = "";
 }
 
 public sealed class HotkeyBinding
