@@ -207,6 +207,111 @@ public class ConfigLoaderTests
     }
 
     [Fact]
+    public void ParsesTagRulesSection()
+    {
+        const string yaml = """
+            tagRules:
+              - processName: "^firefox\\.exe$"
+                tag: 2
+                follow: true
+              - className: "CASCADIA_HOSTING_WINDOW_CLASS"
+                monitor: 2
+                tag: 3
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Warnings);
+        Assert.Equal(2, result.Config.TagRules.Count);
+        Assert.Equal("^firefox\\.exe$", result.Config.TagRules[0].ProcessName);
+        Assert.Equal(2, result.Config.TagRules[0].Tag);
+        Assert.Equal(0, result.Config.TagRules[0].Monitor);
+        Assert.True(result.Config.TagRules[0].Follow);
+        Assert.Equal("CASCADIA_HOSTING_WINDOW_CLASS", result.Config.TagRules[1].ClassName);
+        Assert.Equal(3, result.Config.TagRules[1].Tag);
+        Assert.Equal(2, result.Config.TagRules[1].Monitor);
+        Assert.False(result.Config.TagRules[1].Follow);
+    }
+
+    [Fact]
+    public void NegativeTagRuleMonitor_IsDroppedWithWarning()
+    {
+        const string yaml = """
+            tagRules:
+              - processName: "firefox"
+                tag: 1
+                monitor: -1
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Config.TagRules);
+        Assert.Contains(result.Warnings, w => w.Contains("monitor -1"));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    public void TagRuleOutsideTagCount_IsDroppedWithWarning(int tag)
+    {
+        string yaml = $"""
+            general:
+              tagCount: 5
+            tagRules:
+              - processName: "firefox"
+                tag: {tag}
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Config.TagRules);
+        Assert.Contains(result.Warnings, w => w.Contains("outside 1..5"));
+    }
+
+    [Fact]
+    public void TagRuleMissingTag_IsDroppedWithWarning()
+    {
+        const string yaml = """
+            tagRules:
+              - processName: "firefox"
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Config.TagRules);
+        Assert.Contains(result.Warnings, w => w.Contains("tag 0"));
+    }
+
+    [Fact]
+    public void AllBlankTagRule_IsDroppedWithWarning()
+    {
+        const string yaml = """
+            tagRules:
+              - tag: 2
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Config.TagRules);
+        Assert.Contains(result.Warnings, w => w.Contains("would match every window"));
+    }
+
+    [Fact]
+    public void InvalidTagRuleRegex_IsDroppedWithWarning()
+    {
+        const string yaml = """
+            tagRules:
+              - title: "("
+                tag: 1
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Config.TagRules);
+        Assert.Contains(result.Warnings, w => w.Contains("tagRules") && w.Contains("title"));
+    }
+
+    [Fact]
     public void RealSampleConfig_ParsesCleanlyWithNoWarnings()
     {
         ConfigLoadResult result = ConfigLoader.LoadFromFile(SampleConfigPath);

@@ -69,7 +69,8 @@ var manager = new WindowManager(layouts, initial.Config.General.DefaultLayout, d
 manager.InitializeMonitors();
 manager.SyncInitialTaskbarState(); // before BarWindow/Arrange: recognize an already-hidden taskbar from a previous run
 manager.SetHideTitlebars(initial.Config.General.HideTitlebars);
-manager.SetBlacklist(BlacklistCompiler.Compile(initial.Config.Blacklist));
+manager.SetBlacklist(WindowRuleCompiler.CompileBlacklist(initial.Config.Blacklist));
+manager.SetTagRules(WindowRuleCompiler.CompileTagRules(initial.Config.TagRules));
 manager.SetRememberState(initial.Config.General.RememberState);
 CommandRegistry commands = BuiltinCommands.CreateDefault(manager);
 using var tracker = new WinEventTracker();

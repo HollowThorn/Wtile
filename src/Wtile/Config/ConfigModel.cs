@@ -11,6 +11,7 @@ public sealed class WtileConfig
     public BarConfig Bar { get; set; } = new();
     public List<HotkeyBinding> Hotkeys { get; set; } = [];
     public List<BlacklistRule> Blacklist { get; set; } = [];
+    public List<TagRule> TagRules { get; set; } = [];
 }
 
 public sealed class GeneralConfig
@@ -124,4 +125,37 @@ public sealed class BlacklistRule
     public string ProcessName { get; set; } = "";
     public string ClassName { get; set; } = "";
     public string Title { get; set; } = "";
+}
+
+/// <summary>One window placement rule: a window matching every non-blank field (same
+/// regex/AND/wildcard semantics as <see cref="BlacklistRule"/>) is dropped onto <see cref="Tag"/>
+/// (and optionally <see cref="Monitor"/>) when it's first seen, instead of the monitor/tag that
+/// happened to be active. First matching rule wins. Rules decide where a window *opens*; a
+/// window already open when Wtile starts/reloads gets its state.json placement back instead if
+/// rememberState has a record for it (see WindowManager.ApplySavedState), with the rule as the
+/// fallback when it doesn't. An all-blank rule is rejected at load time like a blank blacklist
+/// entry.</summary>
+public sealed class TagRule
+{
+    public string ProcessName { get; set; } = "";
+    public string ClassName { get; set; } = "";
+    public string Title { get; set; } = "";
+
+    /// <summary>1-based, matching the view-tag/move-window-to-tag hotkey args; must be within
+    /// general.tagCount or the rule is dropped with a warning (see ConfigLoader.Validate) rather
+    /// than clamped, since silently landing on the wrong tag is worse than not applying.</summary>
+    public int Tag { get; set; }
+
+    /// <summary>1-based monitor in EnumDisplayMonitors order (the same order the bars are laid
+    /// out in). 0 (the default) means "whichever monitor the window opened on". Can't be
+    /// range-checked at load time (the config doesn't know how many monitors there are), so at
+    /// runtime it's clamped to the last monitor -- same treatment ApplySavedState gives a saved
+    /// monitor index, and what you want when a laptop is undocked from its external screen.</summary>
+    public int Monitor { get; set; } = 0;
+
+    /// <summary>Switch the window's monitor to <see cref="Tag"/> as the window appears (dwm's
+    /// switchtotag patch), rather than leaving the view where it is and the window waiting on its
+    /// tag. Off by default -- per rule, so a terminal can stay quiet while a browser pulls you
+    /// over. Never fires for windows already open when Wtile starts (see WindowManager.TryAdd).</summary>
+    public bool Follow { get; set; } = false;
 }
