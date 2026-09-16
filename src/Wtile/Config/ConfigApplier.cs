@@ -28,7 +28,7 @@ internal sealed class ConfigApplier(WindowManager manager, IReadOnlyList<BarWind
         if (manager.HideTitlebars != config.General.HideTitlebars)
             manager.SetHideTitlebars(config.General.HideTitlebars);
         manager.SetBlacklist(BlacklistCompiler.Compile(config.Blacklist));
-        manager.SetRememberLayout(config.General.RememberLayout);
+        manager.SetRememberState(config.General.RememberState);
         focusBorder.ApplyConfig(config.General);
         foreach (BarWindow bar in bars)
             bar.ApplyConfig(config.Bar);

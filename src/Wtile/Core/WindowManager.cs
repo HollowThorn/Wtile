@@ -94,10 +94,10 @@ internal sealed unsafe class WindowManager
     /// from every managed window, tiled and floating alike. See <see cref="SetHideTitlebars"/>.</summary>
     public bool HideTitlebars { get; private set; }
 
-    /// <summary>Global config-driven flag (general.rememberLayout): whether Program.cs should
+    /// <summary>Global config-driven flag (general.rememberState): whether Program.cs should
     /// save/restore window placement via WindowStateStore at startup/quit/reload. Off by default;
     /// a plain flag with no side effects, same shape as <see cref="SetBlacklist"/>.</summary>
-    public bool RememberLayout { get; private set; }
+    public bool RememberState { get; private set; }
 
     /// <summary>Fires after any state change any bar might need to redraw for (arrange, focus, tag switch).</summary>
     public event Action? Changed;
@@ -131,7 +131,7 @@ internal sealed unsafe class WindowManager
         _blacklistNeedsProcessName = rules.Any(r => r.ProcessName is not null);
     }
 
-    public void SetRememberLayout(bool enabled) => RememberLayout = enabled;
+    public void SetRememberState(bool enabled) => RememberState = enabled;
 
     public void SetHideTitlebars(bool hidden)
     {

@@ -26,7 +26,7 @@ general:
   # and restores it on startup and on "reload", matching saved windows to newly-opened ones by
   # process name + window class (title isn't used -- it churns too much, e.g. browser tabs). Off
   # by default.
-  rememberLayout: false
+  rememberState: false
 
 # blacklist: exclude specific windows from tiling entirely, matched by regex against the
 # window's process name, window class name, and/or title (case-insensitive, unanchored -- add

@@ -44,7 +44,7 @@ public sealed class GeneralConfig
     /// last time (matched to newly-opened windows by process name + window class), and saves that
     /// placement to state.json on quit/reload. Off by default since it's new automatic-placement
     /// behavior a user hasn't asked for yet.</summary>
-    public bool RememberLayout { get; set; } = false;
+    public bool RememberState { get; set; } = false;
 }
 
 public sealed class LayoutConfig

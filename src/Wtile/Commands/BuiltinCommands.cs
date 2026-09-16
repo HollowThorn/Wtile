@@ -275,9 +275,9 @@ internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IR
 
     public void Execute(IReadOnlyList<string> args)
     {
-        // Save with the pre-reload RememberLayout value, before config (which may flip it) is
-        // even read -- see WindowManager.RememberLayout / ApplySavedState.
-        if (manager.RememberLayout)
+        // Save with the pre-reload RememberState value, before config (which may flip it) is
+        // even read -- see WindowManager.RememberState / ApplySavedState.
+        if (manager.RememberState)
             WindowStateStore.Save(statePath, manager.CaptureState());
 
         ConfigLoadResult result = ConfigLoader.LoadFromFile(configPath);
@@ -287,7 +287,7 @@ internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IR
         foreach (BarWindow bar in bars)
             bar.RefreshGeometry();
 
-        if (manager.RememberLayout && WindowStateStore.TryLoad(statePath, out SavedState state))
+        if (manager.RememberState && WindowStateStore.TryLoad(statePath, out SavedState state))
             manager.ApplySavedState(state);
 
         Console.WriteLine("[reload] Done.");
