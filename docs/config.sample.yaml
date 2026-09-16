@@ -284,6 +284,8 @@ hotkeys:
   - keys: "Win+Space"              # hides the real Windows taskbar entirely (not Windows' own
     command: toggle-taskbar        # auto-hide, which still peeks out on mouse-hover at the edge)
                                     # and reclaims its space for tiling.
+  - keys: "Win+Shift+Space"        # hides Wtile's own bar on every monitor (dwm/bug.n-style) and
+    command: toggle-bar            # reclaims its space for tiling.
 
   # --- debug ---
   - keys: "Win+Shift+I"            # prints the focused window's process/class/title to the

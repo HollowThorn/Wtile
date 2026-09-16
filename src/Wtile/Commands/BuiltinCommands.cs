@@ -303,6 +303,22 @@ internal sealed class AppLauncherCommand(LauncherWindow launcher) : ICommand
     public void Execute(IReadOnlyList<string> args) => launcher.Toggle();
 }
 
+/// <summary>Shows/hides Wtile's own bar on every monitor together (dwm/bug.n-style hiding of the
+/// bar, distinct from toggle-taskbar which hides the real Windows taskbar) and reclaims/releases
+/// the space it reserves for tiling. Registered separately in Program.cs, same reason as
+/// ReloadCommand: needs the BarWindow list, constructed after the initial CommandRegistry.</summary>
+internal sealed class ToggleBarCommand(IReadOnlyList<BarWindow> bars) : ICommand
+{
+    public string Name => "toggle-bar";
+
+    public void Execute(IReadOnlyList<string> args)
+    {
+        bool showing = bars.Count == 0 || bars[0].IsVisible;
+        foreach (BarWindow bar in bars)
+            bar.SetVisible(!showing);
+    }
+}
+
 internal static class BuiltinCommands
 {
     public static CommandRegistry CreateDefault(WindowManager manager)

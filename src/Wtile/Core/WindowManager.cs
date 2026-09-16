@@ -723,6 +723,8 @@ internal sealed unsafe class WindowManager
         monitor.PreviousTagIndex = previous;
         monitor.ActiveTagIndex = tagIndex;
 
+        ManagedWindow? previouslyFocused = Find(FocusedHandle);
+
         foreach (ManagedWindow w in _windows)
         {
             if (w.MonitorIndex != monitorIndex)
@@ -743,6 +745,19 @@ internal sealed unsafe class WindowManager
         }
 
         Arrange();
+
+        // dwm's view(): landing on a tag always focuses something there (top of stack) rather
+        // than leaving Windows to pick whatever it wants once the old focus target gets hidden --
+        // unless the previously-focused window is still visible here (e.g. it's pinned), in which
+        // case it keeps focus untouched.
+        bool previousStillVisible = previouslyFocused is not null && IsVisibleOn(previouslyFocused, monitor, monitorIndex);
+        if (!previousStillVisible)
+        {
+            List<ManagedWindow> visible = VisibleWindowsOnCurrentMonitor();
+            if (visible.Count > 0)
+                WindowInspector.ForceSetForegroundWindow(visible[0].Handle);
+        }
+
         Changed?.Invoke();
     }
 

@@ -42,6 +42,11 @@ internal sealed unsafe class BarWindow : IDisposable
     private int _height;
     private bool _isBottom;
 
+    /// <summary>False while toggle-bar has hidden this bar (dwm/bug.n-style: like hiding the real
+    /// taskbar via toggle-taskbar, but for Wtile's own bar) -- its reserved inset drops to 0 while
+    /// hidden so tiling reclaims the space, same idea as <see cref="WindowManager.IsTaskbarHidden"/>.</summary>
+    public bool IsVisible { get; private set; } = true;
+
     public BarWindow(WindowManager manager, CommandRegistry commands, BarConfig config, Monitor monitor, int monitorIndex)
     {
         _manager = manager;
@@ -128,9 +133,22 @@ internal sealed unsafe class BarWindow : IDisposable
 
     private void ApplyReservedInset()
     {
-        _monitor.ReservedTopInset = _isBottom ? 0 : _height;
-        _monitor.ReservedBottomInset = _isBottom ? _height : 0;
+        int reserved = IsVisible ? _height : 0;
+        _monitor.ReservedTopInset = _isBottom ? 0 : reserved;
+        _monitor.ReservedBottomInset = _isBottom ? reserved : 0;
         _manager.Arrange();
+    }
+
+    /// <summary>Shows/hides this bar and reclaims/releases the space it reserves for tiling --
+    /// the bar's own equivalent of <see cref="WindowManager.ToggleTaskbar"/>, driven by the
+    /// "toggle-bar" command (see <see cref="Commands.BuiltinCommands"/>).</summary>
+    public void SetVisible(bool visible)
+    {
+        if (IsVisible == visible)
+            return;
+        IsVisible = visible;
+        PInvoke.ShowWindow(_hwnd, visible ? SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE : SHOW_WINDOW_CMD.SW_HIDE);
+        ApplyReservedInset();
     }
 
     private void RebuildSegments(BarConfig config)

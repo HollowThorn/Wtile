@@ -79,6 +79,7 @@ using var tracker = new WinEventTracker();
 var bars = new List<BarWindow>();
 for (int i = 0; i < manager.Monitors.Count; i++)
     bars.Add(new BarWindow(manager, commands, initial.Config.Bar, manager.Monitors[i], i));
+commands.Register(new ToggleBarCommand(bars));
 
 using var focusBorder = new FocusBorderWindow(manager, initial.Config.General.FocusedBorderWidth, initial.Config.General.FocusedBorderColor);
 
