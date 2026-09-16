@@ -342,7 +342,34 @@ internal sealed unsafe class WindowManager
         }
     }
 
-    public void OnWindowShown(HWND hwnd) => TryAdd(hwnd, arrange: true);
+    /// <summary>An already-tracked window we're deliberately keeping hidden for a tag switch (see
+    /// <see cref="_selfHidden"/>) can still un-hide itself against our wishes -- e.g. a browser
+    /// reusing its existing window to open a link clicked in another app typically does
+    /// ShowWindow(SW_SHOW) + SetForegroundWindow() on itself regardless of which tag Wtile
+    /// currently has it parked on. Left alone, TryAdd's already-tracked early-return would leave
+    /// it visibly leaking over whatever tag is currently being viewed while Wtile's own
+    /// bookkeeping still thinks it's hidden. Instead, follow it: switch its monitor's view to its
+    /// own tag, same as clicking that tag yourself, so it reappears in its rightful place rather
+    /// than looking like it got dragged onto whatever tag you happened to be viewing.</summary>
+    public void OnWindowShown(HWND hwnd)
+    {
+        if (_selfHidden.Remove(hwnd) && Find(hwnd) is { } window)
+        {
+            Monitor monitor = _monitors[window.MonitorIndex];
+            if (!window.IsPinned && !monitor.IsViewingAllTags && window.TagIndex != monitor.ActiveTagIndex)
+            {
+                CurrentMonitorIndex = window.MonitorIndex;
+                ActivateTag(window.TagIndex); // arranges + refreshes the bar
+            }
+            else
+            {
+                Arrange();
+            }
+            return;
+        }
+
+        TryAdd(hwnd, arrange: true);
+    }
 
     private const nuint RearrangeTimerId = 1;
 
@@ -740,6 +767,7 @@ internal sealed unsafe class WindowManager
             }
             else if (!wasVisible && shouldBeVisible)
             {
+                _selfHidden.Remove(w.Handle);
                 PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
             }
         }
