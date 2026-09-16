@@ -303,13 +303,18 @@ internal sealed unsafe class WindowManager
             liveProcessNames[w.Handle] = processName;
         }
 
-        var claimed = new HashSet<HWND>();
+        // Placed by config in TryAdd; keep state.json's hands off these. Tracked separately from
+        // `claimed` (not folded into it) so the unclaimed-windows pass at the end still carries
+        // them over into the rebuilt list -- dropping them there would leave a hidden one (say,
+        // on a non-active tag) invisible and untracked, with no event ever bringing it back.
+        var ruled = new HashSet<HWND>();
         foreach (ManagedWindow w in _windows)
         {
             if (WindowTagRules.TryResolve(_tagRules, liveProcessNames[w.Handle], w.ClassName, w.Title, out _))
-                claimed.Add(w.Handle); // placed by config in TryAdd; keep state.json's hands off it
+                ruled.Add(w.Handle);
         }
 
+        var claimed = new HashSet<HWND>();
         var restored = new List<ManagedWindow>();
         foreach (SavedWindowState saved in state.Windows)
         {
@@ -317,7 +322,7 @@ internal sealed unsafe class WindowManager
                 continue; // never matches -- avoids false positives between two access-denied windows
 
             ManagedWindow? match = _windows.Find(w =>
-                !claimed.Contains(w.Handle) && w.ClassName == saved.ClassName && liveProcessNames[w.Handle] == saved.ProcessName);
+                !claimed.Contains(w.Handle) && !ruled.Contains(w.Handle) && w.ClassName == saved.ClassName && liveProcessNames[w.Handle] == saved.ProcessName);
             if (match is null)
                 continue;
 
