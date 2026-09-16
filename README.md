@@ -1,4 +1,4 @@
-# Wtile
+# <img src="docs/icon.png" width="32" height="32" alt=""> Wtile
 
 A dynamic tiling window manager for Windows.
 

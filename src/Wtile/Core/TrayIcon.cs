@@ -27,6 +27,11 @@ internal sealed unsafe class TrayIcon : IDisposable
     private const uint MenuIdReload = 1;
     private const uint MenuIdQuit = 2;
 
+    /// <summary>RT_GROUP_ICON id the .NET SDK embeds Wtile.csproj's &lt;ApplicationIcon&gt; under
+    /// (same ordinal as IDI_APPLICATION, which is coincidental -- this loads Wtile's own icon out
+    /// of its own module, not the system one).</summary>
+    private const uint AppIconResourceId = 32512;
+
     private static readonly Dictionary<nint, TrayIcon> Instances = [];
     private static bool _classRegistered;
 
@@ -55,7 +60,7 @@ internal sealed unsafe class TrayIcon : IDisposable
             uID = 1,
             uFlags = NOTIFY_ICON_DATA_FLAGS.NIF_MESSAGE | NOTIFY_ICON_DATA_FLAGS.NIF_ICON | NOTIFY_ICON_DATA_FLAGS.NIF_TIP,
             uCallbackMessage = WM_APP_TRAYICON,
-            hIcon = PInvoke.LoadIcon(HINSTANCE.Null, PInvoke.IDI_APPLICATION), // stand-in until Wtile has its own .ico
+            hIcon = PInvoke.LoadIcon(new HINSTANCE(PInvoke.GetModuleHandle((PCWSTR)null).Value), (PCWSTR)(char*)AppIconResourceId),
             szTip = "Wtile",
         };
         PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_ADD, in _data);
