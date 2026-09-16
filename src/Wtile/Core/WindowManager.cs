@@ -230,7 +230,7 @@ internal sealed unsafe class WindowManager
     /// cheap enough -- never done on the hot add/remove/arrange path.</summary>
     public SavedState CaptureState()
     {
-        var state = new SavedState();
+        var state = new SavedState { IsTaskbarHidden = IsTaskbarHidden };
 
         for (int i = 0; i < _monitors.Count; i++)
         {
@@ -270,6 +270,12 @@ internal sealed unsafe class WindowManager
     /// already gave it. Called at startup and from ReloadCommand -- never on the hot path.</summary>
     public void ApplySavedState(SavedState state)
     {
+        if (IsTaskbarHidden != state.IsTaskbarHidden)
+        {
+            IsTaskbarHidden = state.IsTaskbarHidden;
+            TaskbarController.SetVisible(!IsTaskbarHidden);
+        }
+
         foreach (SavedMonitorState saved in state.Monitors)
         {
             if (saved.Index < 0 || saved.Index >= _monitors.Count)

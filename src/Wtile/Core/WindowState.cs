@@ -10,6 +10,12 @@ namespace Wtile.Core;
 
 public sealed class SavedState
 {
+    /// <summary>Whether the real Windows taskbar was hidden (see WindowManager.IsTaskbarHidden,
+    /// toggle-taskbar) at the last save -- global, not per-monitor, same as the live flag it
+    /// mirrors. Restored on startup/reload only; always shown again unconditionally at quit
+    /// regardless of this (see Program.cs), so it's never left hidden behind if Wtile exits.</summary>
+    public bool IsTaskbarHidden { get; set; }
+
     public List<SavedMonitorState> Monitors { get; set; } = [];
     public List<SavedWindowState> Windows { get; set; } = [];
 }

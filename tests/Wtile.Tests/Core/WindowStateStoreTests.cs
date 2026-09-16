@@ -14,6 +14,7 @@ public class WindowStateStoreTests
         {
             var state = new SavedState
             {
+                IsTaskbarHidden = true,
                 Monitors = [new SavedMonitorState { Index = 0, ActiveTagIndex = 2, IsViewingAllTags = true }],
                 Windows =
                 [
@@ -34,6 +35,7 @@ public class WindowStateStoreTests
             bool loaded = WindowStateStore.TryLoad(path, out SavedState result);
 
             Assert.True(loaded);
+            Assert.True(result.IsTaskbarHidden);
             Assert.Single(result.Monitors);
             Assert.Equal(0, result.Monitors[0].Index);
             Assert.Equal(2, result.Monitors[0].ActiveTagIndex);
@@ -62,6 +64,7 @@ public class WindowStateStoreTests
         bool loaded = WindowStateStore.TryLoad(path, out SavedState state);
 
         Assert.False(loaded);
+        Assert.False(state.IsTaskbarHidden);
         Assert.Empty(state.Monitors);
         Assert.Empty(state.Windows);
     }
