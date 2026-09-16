@@ -25,8 +25,9 @@ internal sealed unsafe class WindowManager
     private readonly LayoutRegistry _layouts;
     private readonly string _defaultLayoutName;
     private readonly IReadOnlyDictionary<string, double> _defaultLayoutParams;
-    private IReadOnlyList<CompiledBlacklistRule> _blacklist = [];
-    private bool _blacklistNeedsProcessName;
+    private IReadOnlyList<CompiledWindowRule> _blacklist = [];
+    private IReadOnlyList<CompiledTagRule> _tagRules = [];
+    private bool _rulesNeedProcessName; // resolving one costs a syscall; skipped unless some rule reads it
     private List<Monitor> _monitors = [];
 
     public WindowManager(LayoutRegistry layouts, string defaultLayoutName, IReadOnlyDictionary<string, double> defaultLayoutParams, int tagCount = 9)
@@ -125,11 +126,23 @@ internal sealed unsafe class WindowManager
     /// (TryAdd, where the check runs, is a no-op for an already-tracked window). No lock needed:
     /// WindowManager is only ever touched on the single WinEventHook pump thread, same reasoning
     /// as SetHideTitlebars.</summary>
-    public void SetBlacklist(IReadOnlyList<CompiledBlacklistRule> rules)
+    public void SetBlacklist(IReadOnlyList<CompiledWindowRule> rules)
     {
         _blacklist = rules;
-        _blacklistNeedsProcessName = rules.Any(r => r.ProcessName is not null);
+        UpdateRulesNeedProcessName();
     }
+
+    /// <summary>Replaces the live set of tag rules (see WindowTagRules). Same reach as
+    /// <see cref="SetBlacklist"/>: only windows first seen after this call are placed by the new
+    /// rules -- a window already on some tag is not retroactively moved.</summary>
+    public void SetTagRules(IReadOnlyList<CompiledTagRule> rules)
+    {
+        _tagRules = rules;
+        UpdateRulesNeedProcessName();
+    }
+
+    private void UpdateRulesNeedProcessName() =>
+        _rulesNeedProcessName = _blacklist.Any(r => r.ProcessName is not null) || _tagRules.Any(r => r.Match.ProcessName is not null);
 
     public void SetRememberLayout(bool enabled) => RememberLayout = enabled;
 
@@ -267,7 +280,11 @@ internal sealed unsafe class WindowManager
     /// class (title excluded -- it churns, e.g. browser tabs): saved windows are matched in saved
     /// order, FIFO, against not-yet-claimed live windows; an unmatched saved record is dropped,
     /// and a live window with no matching record just keeps whatever placement Seed()/TryAdd
-    /// already gave it. Called at startup and from ReloadCommand -- never on the hot path.</summary>
+    /// already gave it. A live window that matches a tag rule is never touched by saved state at
+    /// all -- config wins over state.json (see TagRule), and checking here rather than when
+    /// saving means a rule added between quit and the next launch still wins over the record
+    /// written before it existed. Called at startup and from ReloadCommand -- never on the hot
+    /// path.</summary>
     public void ApplySavedState(SavedState state)
     {
         foreach (SavedMonitorState saved in state.Monitors)
@@ -287,6 +304,12 @@ internal sealed unsafe class WindowManager
         }
 
         var claimed = new HashSet<HWND>();
+        foreach (ManagedWindow w in _windows)
+        {
+            if (WindowTagRules.TryResolve(_tagRules, liveProcessNames[w.Handle], w.ClassName, w.Title, out _))
+                claimed.Add(w.Handle); // placed by config in TryAdd; keep state.json's hands off it
+        }
+
         var restored = new List<ManagedWindow>();
         foreach (SavedWindowState saved in state.Windows)
         {
@@ -831,31 +854,59 @@ internal sealed unsafe class WindowManager
             return;
         }
 
-        if (_blacklist.Count > 0)
+        // Resolved once here and shared by the blacklist and tag rules below -- the only
+        // per-window syscall on this path, and only paid when some rule actually reads it.
+        string processName = _rulesNeedProcessName && WindowInspector.TryGetProcessName(hwnd, out string name) ? name : "";
+
+        if (_blacklist.Count > 0 && WindowBlacklist.IsBlacklisted(_blacklist, processName, snapshot.ClassName, snapshot.Title))
         {
-            string processName = _blacklistNeedsProcessName && WindowInspector.TryGetProcessName(hwnd, out string name) ? name : "";
-            if (WindowBlacklist.IsBlacklisted(_blacklist, processName, snapshot.ClassName, snapshot.Title))
-            {
-                Console.WriteLine($"[blacklist] Skipped '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}')");
-                return;
-            }
+            Console.WriteLine($"[blacklist] Skipped '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}')");
+            return;
         }
 
         int monitorIndex = ResolveMonitorIndex(hwnd);
         Monitor monitor = _monitors[monitorIndex];
+
+        CompiledTagRule? tagRule = null;
+        if (_tagRules.Count > 0 && WindowTagRules.TryResolve(_tagRules, processName, snapshot.ClassName, snapshot.Title, out CompiledTagRule matched))
+        {
+            tagRule = matched;
+            Console.WriteLine($"[tag-rule] '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}') -> tag {matched.TagIndex + 1}");
+        }
 
         var window = new ManagedWindow(hwnd)
         {
             Title = snapshot.Title,
             ClassName = snapshot.ClassName,
             MonitorIndex = monitorIndex,
-            TagIndex = monitor.ActiveTagIndex,
+            TagIndex = tagRule?.TagIndex ?? monitor.ActiveTagIndex,
             OriginalStyle = WindowInspector.GetStyle(hwnd),
         };
         Console.WriteLine($"[manage] '{window.Title}' (class='{window.ClassName}')");
         _windows.Insert(0, window); // dwm-style: a new window becomes master
         if (HideTitlebars && !IsTitlebarHideExempt(window.ClassName))
             WindowInspector.SetTitlebarHidden(hwnd, window.OriginalStyle, hidden: true);
+
+        if (tagRule is not null && !IsVisibleOn(window, monitor, monitorIndex))
+        {
+            // The rule put it on a tag other than the one being viewed on its monitor. Follow
+            // only on a live show event (arrange: true) -- never during Seed() at startup, where
+            // every pre-existing mapped window would otherwise flip the view in turn (and any
+            // remembered active tag gets applied right after anyway). ActivateTag does the rest:
+            // hides the old tag's windows, arranges, and focuses the top of the stack, which is
+            // this window since it was just inserted at index 0.
+            if (tagRule.Follow && arrange)
+            {
+                SelectMonitor(monitorIndex);
+                ActivateTag(tagRule.TagIndex);
+                return;
+            }
+
+            // Otherwise it waits on its tag, same show/hide bookkeeping as MoveWindowToTag.
+            _selfHidden.Add(hwnd);
+            PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_HIDE);
+        }
+
         if (arrange)
             Arrange();
     }

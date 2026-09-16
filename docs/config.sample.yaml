@@ -44,6 +44,28 @@ general:
 #   - processName: "^steam\\.exe$"
 #     title: "Friends List"
 
+# tagRules: drop specific windows onto a specific tag as they appear, instead of whichever tag
+# happened to be active (dwm's rules[] with a tag mask). Matched exactly like blacklist: above
+# (regex on processName/className/title, case-insensitive, unanchored, blank field = wildcard,
+# all set fields must match); the first matching rule wins. "tag" is 1-based, the same number
+# you'd press with view-tag. Rules only apply to a window when Wtile first sees it -- editing one
+# and pressing "reload" doesn't move windows already on some tag, but a mapped window does beat
+# whatever rememberLayout's state.json says for it, at startup and on reload alike: config is
+# what you asked for, state.json only what you last happened to do. Windows with no matching
+# rule still use rememberLayout as before.
+#
+# follow: true switches that window's monitor to the tag as it appears (dwm's switchtotag
+# patch), so a browser can pull you over while a terminal (follow left off, or false) opens
+# quietly on its tag for later. Never fires for windows already open when Wtile starts.
+# A rule whose tag is outside 1..tagCount, or with every match field blank, is dropped with a
+# warning. Same inspect-window hotkey as for blacklist to find the exact names. Example:
+# tagRules:
+#   - processName: "^firefox\\.exe$"
+#     tag: 2
+#     follow: true
+#   - processName: "^wt\\.exe$"
+#     tag: 3
+
 layouts:
   # Every tag starts on master-stack with these params (see hotkeys --- layout --- below for how
   # per-tag values then diverge, including gap via adjust-gap/toggle-gap). "master-stack-right"
@@ -289,7 +311,8 @@ hotkeys:
 
   # --- debug ---
   - keys: "Win+Shift+I"            # prints the focused window's process/class/title to the
-    command: inspect-window        # console -- use it to find values for a blacklist: rule above
+    command: inspect-window        # console -- use it to find values for a blacklist: or
+                                    # tagRules: rule above
 
   # --- session ---
   - keys: "Win+Shift+Q"

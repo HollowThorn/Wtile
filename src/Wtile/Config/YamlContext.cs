@@ -16,6 +16,7 @@ namespace Wtile.Config;
 [YamlSerializable(typeof(BarModuleConfig))]
 [YamlSerializable(typeof(HotkeyBinding))]
 [YamlSerializable(typeof(BlacklistRule))]
+[YamlSerializable(typeof(TagRule))]
 public partial class WtileYamlContext : StaticContext
 {
 }

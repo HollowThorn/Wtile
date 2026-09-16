@@ -126,17 +126,40 @@ public static class ConfigLoader
                 warnings.Add("A blacklist entry has no processName/className/title set and would match every window; ignored.");
                 continue;
             }
-            if (IsValidPattern(rule.ProcessName, "processName", warnings)
-                && IsValidPattern(rule.ClassName, "className", warnings)
-                && IsValidPattern(rule.Title, "title", warnings))
+            if (IsValidPattern(rule.ProcessName, "blacklist", "processName", warnings)
+                && IsValidPattern(rule.ClassName, "blacklist", "className", warnings)
+                && IsValidPattern(rule.Title, "blacklist", "title", warnings))
             {
                 validRules.Add(rule);
             }
         }
         config.Blacklist = validRules;
+
+        // Runs after the tagCount check above so the range here is against the sanitized value.
+        var validTagRules = new List<TagRule>(config.TagRules.Count);
+        foreach (TagRule rule in config.TagRules)
+        {
+            if (string.IsNullOrWhiteSpace(rule.ProcessName) && string.IsNullOrWhiteSpace(rule.ClassName) && string.IsNullOrWhiteSpace(rule.Title))
+            {
+                warnings.Add("A tagRules entry has no processName/className/title set and would match every window; ignored.");
+                continue;
+            }
+            if (rule.Tag < 1 || rule.Tag > config.General.TagCount)
+            {
+                warnings.Add($"tagRules entry has tag {rule.Tag}, outside 1..{config.General.TagCount} (general.tagCount); ignored.");
+                continue;
+            }
+            if (IsValidPattern(rule.ProcessName, "tagRules", "processName", warnings)
+                && IsValidPattern(rule.ClassName, "tagRules", "className", warnings)
+                && IsValidPattern(rule.Title, "tagRules", "title", warnings))
+            {
+                validTagRules.Add(rule);
+            }
+        }
+        config.TagRules = validTagRules;
     }
 
-    private static bool IsValidPattern(string pattern, string fieldName, List<string> warnings)
+    private static bool IsValidPattern(string pattern, string sectionName, string fieldName, List<string> warnings)
     {
         if (string.IsNullOrWhiteSpace(pattern))
             return true;
@@ -147,7 +170,7 @@ public static class ConfigLoader
         }
         catch (ArgumentException)
         {
-            warnings.Add($"blacklist entry has an invalid {fieldName} regex '{pattern}' and will be ignored.");
+            warnings.Add($"{sectionName} entry has an invalid {fieldName} regex '{pattern}' and will be ignored.");
             return false;
         }
     }

@@ -11,6 +11,7 @@ public sealed class WtileConfig
     public BarConfig Bar { get; set; } = new();
     public List<HotkeyBinding> Hotkeys { get; set; } = [];
     public List<BlacklistRule> Blacklist { get; set; } = [];
+    public List<TagRule> TagRules { get; set; } = [];
 }
 
 public sealed class GeneralConfig
@@ -120,4 +121,28 @@ public sealed class BlacklistRule
     public string ProcessName { get; set; } = "";
     public string ClassName { get; set; } = "";
     public string Title { get; set; } = "";
+}
+
+/// <summary>One window-to-tag placement rule: a window matching every non-blank field (same
+/// regex/AND/wildcard semantics as <see cref="BlacklistRule"/>) is dropped onto <see cref="Tag"/>
+/// when it's first seen, instead of the tag that happened to be active. First matching rule
+/// wins. A rule takes precedence over any state.json placement rememberLayout would otherwise
+/// restore for that window -- config is the user's stated intent, state.json only what they
+/// last happened to do. An all-blank rule is rejected at load time like a blank blacklist entry.</summary>
+public sealed class TagRule
+{
+    public string ProcessName { get; set; } = "";
+    public string ClassName { get; set; } = "";
+    public string Title { get; set; } = "";
+
+    /// <summary>1-based, matching the view-tag/move-window-to-tag hotkey args; must be within
+    /// general.tagCount or the rule is dropped with a warning (see ConfigLoader.Validate) rather
+    /// than clamped, since silently landing on the wrong tag is worse than not applying.</summary>
+    public int Tag { get; set; }
+
+    /// <summary>Switch the window's monitor to <see cref="Tag"/> as the window appears (dwm's
+    /// switchtotag patch), rather than leaving the view where it is and the window waiting on its
+    /// tag. Off by default -- per rule, so a terminal can stay quiet while a browser pulls you
+    /// over. Never fires for windows already open when Wtile starts (see WindowManager.TryAdd).</summary>
+    public bool Follow { get; set; } = false;
 }
