@@ -71,7 +71,7 @@ manager.SyncInitialTaskbarState(); // before BarWindow/Arrange: recognize an alr
 manager.SetHideTitlebars(initial.Config.General.HideTitlebars);
 manager.SetBlacklist(WindowRuleCompiler.CompileBlacklist(initial.Config.Blacklist));
 manager.SetTagRules(WindowRuleCompiler.CompileTagRules(initial.Config.TagRules));
-manager.SetRememberLayout(initial.Config.General.RememberLayout);
+manager.SetRememberState(initial.Config.General.RememberState);
 CommandRegistry commands = BuiltinCommands.CreateDefault(manager);
 using var tracker = new WinEventTracker();
 
@@ -96,7 +96,7 @@ commands.Register(new ReloadCommand(configPath, applier, bars, manager, statePat
 using var tray = new TrayIcon(commands);
 
 manager.Seed();
-if (manager.RememberLayout && WindowStateStore.TryLoad(statePath, out SavedState savedState))
+if (manager.RememberState && WindowStateStore.TryLoad(statePath, out SavedState savedState))
     manager.ApplySavedState(savedState);
 manager.OnForegroundChanged(PInvoke.GetForegroundWindow()); // seed initial title; the hook only fires on subsequent changes
 Console.WriteLine($"Tracking {manager.Windows.Count} window(s). Config: {configPath}. Waiting for events...");
@@ -110,7 +110,7 @@ while (true)
     PInvoke.DispatchMessage(msg);
 }
 
-if (manager.RememberLayout)
+if (manager.RememberState)
     WindowStateStore.Save(statePath, manager.CaptureState());
 
 manager.RestoreAllWindows(); // give windows on other tags back before we stop managing them

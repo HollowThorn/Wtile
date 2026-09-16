@@ -27,8 +27,7 @@ internal sealed class BarTheme
         UrgentTag = ParseOr(config.UrgentTag, ColorTranslator.FromHtml("#f38ba8"));
         // occupiedTag defaults to "" (empty), which ParseOr treats as "use the fallback" -- a
         // derived blend that stays readable against whatever background/foreground is picked.
-        // Set it explicitly (e.g. to the same value as background) to make occupied-tag
-        // pills blend in -- the occupancy square still shows either way.
+        // Only actually drawn when bar.occupiedTagIndicator is "background" (see TagsSegment).
         InactiveTagBackground = ParseOr(config.OccupiedTag, Blend(Background, Foreground, 0.15));
         EmptyTagForeground = Blend(Foreground, Background, 0.5);
     }

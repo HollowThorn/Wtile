@@ -5,11 +5,13 @@ using Monitor = Wtile.Core.Monitor;
 
 namespace Wtile.Bar.Segments;
 
-/// <summary>Clickable tag pills for one monitor's bar, dwm-style: active tag highlighted,
-/// occupied tags in normal text with a small corner marker (like dwm's occupancy square), empty
-/// tags dimmed. Occupancy/active-tag are read from this segment's own monitor -- each monitor's
-/// bar shows that monitor's own state, independent of the others.</summary>
-internal sealed class TagsSegment(WindowManager manager, CommandRegistry commands, BarTheme theme, int monitorIndex) : ISegment
+/// <summary>Clickable tag pills for one monitor's bar, dwm-style: active tag highlighted, empty
+/// tags dimmed. An occupied-but-not-active tag gets exactly one of two mutually exclusive
+/// indicators, per <see cref="BarConfig.OccupiedTagIndicator"/>: the default small corner marker
+/// (dwm's occupancy square) with normal text and no fill, or (opt-in) a filled background with no
+/// marker. Occupancy/active-tag are read from this segment's own monitor -- each monitor's bar
+/// shows that monitor's own state, independent of the others.</summary>
+internal sealed class TagsSegment(WindowManager manager, CommandRegistry commands, BarTheme theme, int monitorIndex, bool useBackgroundIndicator) : ISegment
 {
     private const float TagWidth = 28f;
     private const float MarkerSize = 4f;
@@ -33,7 +35,7 @@ internal sealed class TagsSegment(WindowManager manager, CommandRegistry command
                 using var activeBrush = new SolidBrush(theme.ActiveTag);
                 g.FillRectangle(activeBrush, tagBounds);
             }
-            else if (hasWindows)
+            else if (hasWindows && useBackgroundIndicator)
             {
                 using var occupiedBrush = new SolidBrush(theme.InactiveTagBackground);
                 g.FillRectangle(occupiedBrush, tagBounds);
@@ -44,7 +46,7 @@ internal sealed class TagsSegment(WindowManager manager, CommandRegistry command
             using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             g.DrawString((i + 1).ToString(), font, textBrush, tagBounds, format);
 
-            if (hasWindows)
+            if (hasWindows && !useBackgroundIndicator)
                 g.FillRectangle(textBrush, tagBounds.X + MarkerInset, tagBounds.Y + MarkerInset, MarkerSize, MarkerSize);
         }
     }

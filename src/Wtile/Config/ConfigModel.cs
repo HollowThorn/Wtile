@@ -45,7 +45,7 @@ public sealed class GeneralConfig
     /// last time (matched to newly-opened windows by process name + window class), and saves that
     /// placement to state.json on quit/reload. Off by default since it's new automatic-placement
     /// behavior a user hasn't asked for yet.</summary>
-    public bool RememberLayout { get; set; } = false;
+    public bool RememberState { get; set; } = false;
 }
 
 public sealed class LayoutConfig
@@ -63,6 +63,12 @@ public sealed class BarConfig
     public string FontFamily { get; set; } = "Segoe UI";
     public double FontSize { get; set; } = 10;
     public string Position { get; set; } = "top"; // "top" | "bottom"
+
+    /// <summary>How the tags segment marks an occupied-but-not-active tag: "marker" (default,
+    /// dwm-style small corner square, no background fill) or "background" (fills the whole pill
+    /// with <see cref="BarColorsConfig.OccupiedTag"/> instead, no marker -- the two are mutually
+    /// exclusive, never both at once). An unrecognized value falls back to "marker".</summary>
+    public string OccupiedTagIndicator { get; set; } = "marker"; // "marker" | "background"
     public BarSegmentsConfig Segments { get; set; } = new();
     public BarColorsConfig Colors { get; set; } = new();
 
@@ -84,9 +90,8 @@ public sealed class BarModuleConfig
 
     /// <summary>string.Format-style format string with positional placeholders ({0}, {1}, ...) --
     /// meaning is module-specific (see docs/config.sample.yaml). Empty (the default) means "use
-    /// this module's built-in default format" -- same convention as BarColorsConfig.OccupiedTag.
-    /// A malformed format string falls back to the built-in default at draw time rather than
-    /// throwing (see Core/SegmentFormat.cs).</summary>
+    /// this module's built-in default format". A malformed format string falls back to the
+    /// built-in default at draw time rather than throwing (see Core/SegmentFormat.cs).</summary>
     public string Format { get; set; } = "";
 }
 
@@ -97,10 +102,9 @@ public sealed class BarColorsConfig
     public string ActiveTag { get; set; } = "#89b4fa";
     public string UrgentTag { get; set; } = "#f38ba8";
 
-    /// <summary>Background for an occupied-but-not-active tag pill. Empty (the default) means
-    /// "derive one from background/foreground" -- set it explicitly to override, e.g. to
-    /// <c>background</c> itself to make occupied tags visually blend in (the little occupancy
-    /// square still shows either way).</summary>
+    /// <summary>Background for an occupied-but-not-active tag pill -- only drawn when
+    /// <see cref="BarConfig.OccupiedTagIndicator"/> is "background". Empty (the default) means
+    /// "derive one from background/foreground".</summary>
     public string OccupiedTag { get; set; } = "";
 }
 
@@ -128,7 +132,7 @@ public sealed class BlacklistRule
 /// (and optionally <see cref="Monitor"/>) when it's first seen, instead of the monitor/tag that
 /// happened to be active. First matching rule wins. Rules decide where a window *opens*; a
 /// window already open when Wtile starts/reloads gets its state.json placement back instead if
-/// rememberLayout has a record for it (see WindowManager.ApplySavedState), with the rule as the
+/// rememberState has a record for it (see WindowManager.ApplySavedState), with the rule as the
 /// fallback when it doesn't. An all-blank rule is rejected at load time like a blank blacklist
 /// entry.</summary>
 public sealed class TagRule
