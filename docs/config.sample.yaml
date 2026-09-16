@@ -78,11 +78,6 @@ bar:
     foreground: "#cdd6f4"
     activeTag: "#89b4fa"
     urgentTag: "#f38ba8"
-    # occupiedTag: background for an occupied-but-not-active tag pill (the small occupancy
-    # square shows on any occupied tag regardless). Left unset (default), it's derived from
-    # background/foreground so it stays readable against either. Set it to match "background"
-    # above to make occupied tags blend in, keeping just the square as the occupancy indicator.
-    # occupiedTag: "#1e1e2e"
   # Optional per-module format-string overrides for the system-stat segments above. Omit a
   # module here (or leave format: "") to use its built-in default shown below. {N} placeholders
   # are positional (string.Format-style) -- a malformed format string falls back to the default

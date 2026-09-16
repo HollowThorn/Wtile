@@ -33,11 +33,6 @@ internal sealed class TagsSegment(WindowManager manager, CommandRegistry command
                 using var activeBrush = new SolidBrush(theme.ActiveTag);
                 g.FillRectangle(activeBrush, tagBounds);
             }
-            else if (hasWindows)
-            {
-                using var occupiedBrush = new SolidBrush(theme.InactiveTagBackground);
-                g.FillRectangle(occupiedBrush, tagBounds);
-            }
 
             Color textColor = isActive ? theme.Background : hasWindows ? theme.Foreground : theme.EmptyTagForeground;
             using var textBrush = new SolidBrush(textColor);

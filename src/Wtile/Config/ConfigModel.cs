@@ -83,9 +83,8 @@ public sealed class BarModuleConfig
 
     /// <summary>string.Format-style format string with positional placeholders ({0}, {1}, ...) --
     /// meaning is module-specific (see docs/config.sample.yaml). Empty (the default) means "use
-    /// this module's built-in default format" -- same convention as BarColorsConfig.OccupiedTag.
-    /// A malformed format string falls back to the built-in default at draw time rather than
-    /// throwing (see Core/SegmentFormat.cs).</summary>
+    /// this module's built-in default format". A malformed format string falls back to the
+    /// built-in default at draw time rather than throwing (see Core/SegmentFormat.cs).</summary>
     public string Format { get; set; } = "";
 }
 
@@ -95,12 +94,6 @@ public sealed class BarColorsConfig
     public string Foreground { get; set; } = "#cdd6f4";
     public string ActiveTag { get; set; } = "#89b4fa";
     public string UrgentTag { get; set; } = "#f38ba8";
-
-    /// <summary>Background for an occupied-but-not-active tag pill. Empty (the default) means
-    /// "derive one from background/foreground" -- set it explicitly to override, e.g. to
-    /// <c>background</c> itself to make occupied tags visually blend in (the little occupancy
-    /// square still shows either way).</summary>
-    public string OccupiedTag { get; set; } = "";
 }
 
 public sealed class HotkeyBinding
