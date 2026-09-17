@@ -113,6 +113,16 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
             return;
         }
 
+        // Same idea, for a window that went genuinely OS-hidden without a close (see
+        // WindowManager.OnWindowHidden) rather than just being tag-switched away: still tracked,
+        // still IsVisibleOn-true if nothing else has grabbed focus since, but not actually on
+        // screen for the border to frame.
+        if (!WindowInspector.IsWindowVisible(focused.Handle))
+        {
+            Hide();
+            return;
+        }
+
         // Only the selected monitor (selmon) shows a focus border. Selmon can point elsewhere
         // than the last actually-focused window -- e.g. focus-monitor onto a monitor with nothing
         // tiled on it, where OS focus has nowhere to go and stays on the old monitor's window --

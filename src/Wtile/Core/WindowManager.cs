@@ -163,8 +163,22 @@ internal sealed unsafe class WindowManager
     public void RestoreAllWindows()
     {
         foreach (HWND handle in _selfHidden)
-            PInvoke.ShowWindow(handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+            ShowManagedWindow(handle);
         _selfHidden.Clear();
+    }
+
+    /// <summary>Un-hides a window Wtile previously hid for a tag/pin/monitor change. Plain
+    /// SW_SHOWNOACTIVATE doesn't reliably stick for every app right away after a hide -- observed
+    /// live with a real, non-minimized/non-maximized window that stayed Win32-invisible straight
+    /// through an SW_SHOW call and only actually reappeared once re-issued as SW_RESTORE. Verifies
+    /// the plain call actually took and falls back to SW_RESTORE if not, so a tag switch can't
+    /// silently strand a window invisible even though Wtile's own bookkeeping already considers it
+    /// shown again.</summary>
+    private static void ShowManagedWindow(HWND handle)
+    {
+        PInvoke.ShowWindow(handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+        if (!WindowInspector.IsWindowVisible(handle))
+            PInvoke.ShowWindow(handle, SHOW_WINDOW_CMD.SW_RESTORE);
     }
 
     /// <summary>Legacy console host windows (cmd.exe/powershell.exe under conhost.exe, class
@@ -221,6 +235,11 @@ internal sealed unsafe class WindowManager
                 w.TagIndex = tagCount - 1;
         }
 
+        // A window clamped onto a tag it wasn't tracked as hidden-for (e.g. it was self-hidden on
+        // the old tag 7, which no longer exists, and lands on the new last tag 4 -- currently
+        // active) needs an actual ShowWindow to match: Arrange() alone only repositions the
+        // already-visible set, it doesn't show/hide anything.
+        ResyncVisibility();
         Arrange();
     }
 
@@ -356,7 +375,7 @@ internal sealed unsafe class WindowManager
             if (IsVisibleOn(w, monitor, w.MonitorIndex))
             {
                 _selfHidden.Remove(w.Handle);
-                PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+                ShowManagedWindow(w.Handle);
             }
             else
             {
@@ -377,7 +396,15 @@ internal sealed unsafe class WindowManager
     /// than looking like it got dragged onto whatever tag you happened to be viewing.</summary>
     public void OnWindowShown(HWND hwnd)
     {
-        if (_selfHidden.Remove(hwnd) && Find(hwnd) is { } window)
+        _selfHidden.Remove(hwnd);
+
+        // Covers both a window we deliberately hid for a tag switch coming back on its own (the
+        // browser-reusing-a-window case in the doc comment above), and one that went genuinely
+        // OS-hidden without us (see OnWindowHidden) reappearing -- e.g. an app restored from a
+        // tray icon it minimized itself to. Either way it's still tracked with its placement
+        // intact, so just follow it into view rather than falling through to TryAdd, which would
+        // no-op on an already-tracked window and leave it stuck.
+        if (Find(hwnd) is { } window)
         {
             Monitor monitor = _monitors[window.MonitorIndex];
             if (!window.IsPinned && !monitor.IsViewingAllTags && window.TagIndex != monitor.ActiveTagIndex)
@@ -420,7 +447,18 @@ internal sealed unsafe class WindowManager
         if (_selfHidden.Remove(hwnd))
             return; // we hid this ourselves for a tag switch; it's still tracked
 
-        if (Remove(hwnd))
+        // EVENT_OBJECT_HIDE also fires for real hides we didn't cause -- most commonly an app
+        // that "closes" to a tray icon rather than actually quitting (observed with Outlook/
+        // Firefox-with-a-tray-extension). That's not a close: EVENT_OBJECT_DESTROY is the only
+        // signal that actually means the window is gone (see OnWindowDestroyed). Untracking here
+        // used to orphan exactly that window -- still running (visible in Task Manager), still
+        // OS-hidden, but no longer known to Wtile, so nothing ever showed it again, on any tag.
+        // Keep tracking it instead (mirrors OnWindowCloaked, which never untracks either); just
+        // re-arrange so it stops eating a layout slot while genuinely hidden. Its own real
+        // OS-visibility (see WindowInspector.IsWindowVisible) already excludes it from
+        // TiledWindowsOn/VisibleWindowsOnCurrentMonitor, and OnWindowShown will find it still
+        // tracked and restore it in place if it ever reappears.
+        if (Find(hwnd) is not null)
             Arrange();
     }
 
@@ -496,6 +534,11 @@ internal sealed unsafe class WindowManager
                 _suppressMonitorFollow = false;
             else
                 CurrentMonitorIndex = window.MonitorIndex;
+
+            // dwm's per-tag "sel": remember this as the tag's own last-focused window regardless
+            // of general.rememberState, so coming back to this tag later (see ActivateTag) can
+            // restore it instead of always landing on the top of the stack.
+            _monitors[window.MonitorIndex].Tags[window.TagIndex].LastFocusedHandle = hwnd;
         }
 
         Changed?.Invoke();
@@ -591,7 +634,7 @@ internal sealed unsafe class WindowManager
         if (tagIndex == _monitors[window.MonitorIndex].ActiveTagIndex)
         {
             _selfHidden.Remove(window.Handle);
-            PInvoke.ShowWindow(window.Handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+            ShowManagedWindow(window.Handle);
         }
         else
         {
@@ -705,10 +748,12 @@ internal sealed unsafe class WindowManager
     private List<ManagedWindow> TiledWindowsOnCurrentMonitor() => TiledWindowsOn(CurrentMonitor, CurrentMonitorIndex);
 
     private List<ManagedWindow> TiledWindowsOn(Monitor monitor, int monitorIndex) =>
-        _windows.FindAll(w => IsVisibleOn(w, monitor, monitorIndex) && !w.IsMinimized && !w.IsFloating && !WindowInspector.IsCloaked(w.Handle));
+        _windows.FindAll(w => IsVisibleOn(w, monitor, monitorIndex) && !w.IsMinimized && !w.IsFloating
+            && !WindowInspector.IsCloaked(w.Handle) && WindowInspector.IsWindowVisible(w.Handle));
 
     private List<ManagedWindow> VisibleWindowsOnCurrentMonitor() =>
-        _windows.FindAll(w => IsVisibleOn(w, CurrentMonitor, CurrentMonitorIndex) && !w.IsMinimized && !WindowInspector.IsCloaked(w.Handle));
+        _windows.FindAll(w => IsVisibleOn(w, CurrentMonitor, CurrentMonitorIndex) && !w.IsMinimized
+            && !WindowInspector.IsCloaked(w.Handle) && WindowInspector.IsWindowVisible(w.Handle));
 
     /// <summary>True if this window is currently supposed to be visible on this specific monitor:
     /// on its active tag, pinned (bug.n's "pin" -- visible/tiled on every tag regardless of its
@@ -762,7 +807,7 @@ internal sealed unsafe class WindowManager
             if (w.MonitorIndex == monitorIndex && w.TagIndex != monitor.ActiveTagIndex && !w.IsPinned)
             {
                 _selfHidden.Remove(w.Handle);
-                PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+                ShowManagedWindow(w.Handle);
             }
         }
 
@@ -806,22 +851,26 @@ internal sealed unsafe class WindowManager
             else if (!wasVisible && shouldBeVisible)
             {
                 _selfHidden.Remove(w.Handle);
-                PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+                ShowManagedWindow(w.Handle);
             }
         }
 
         Arrange();
 
-        // dwm's view(): landing on a tag always focuses something there (top of stack) rather
-        // than leaving Windows to pick whatever it wants once the old focus target gets hidden --
-        // unless the previously-focused window is still visible here (e.g. it's pinned), in which
-        // case it keeps focus untouched.
+        // dwm's view(): landing on a tag focuses something there rather than leaving Windows to
+        // pick whatever it wants once the old focus target gets hidden -- unless the
+        // previously-focused window is still visible here (e.g. it's pinned), in which case it
+        // keeps focus untouched. Prefers the tag's own last-focused window (see
+        // OnForegroundChanged) over top-of-stack, so switching away and back doesn't lose which
+        // window you actually had selected there -- same as dwm's per-tag "sel".
         bool previousStillVisible = previouslyFocused is not null && IsVisibleOn(previouslyFocused, monitor, monitorIndex);
         if (!previousStillVisible)
         {
             List<ManagedWindow> visible = VisibleWindowsOnCurrentMonitor();
-            if (visible.Count > 0)
-                WindowInspector.ForceSetForegroundWindow(visible[0].Handle);
+            HWND remembered = monitor.Tags[tagIndex].LastFocusedHandle;
+            ManagedWindow? target = visible.Find(w => w.Handle == remembered) ?? (visible.Count > 0 ? visible[0] : null);
+            if (target is not null)
+                WindowInspector.ForceSetForegroundWindow(target.Handle);
         }
 
         Changed?.Invoke();
@@ -871,7 +920,7 @@ internal sealed unsafe class WindowManager
         window.MonitorIndex = targetIndex;
         window.TagIndex = target.ActiveTagIndex;
         _selfHidden.Remove(window.Handle);
-        PInvoke.ShowWindow(window.Handle, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+        ShowManagedWindow(window.Handle);
 
         CurrentMonitorIndex = targetIndex;
         Arrange();

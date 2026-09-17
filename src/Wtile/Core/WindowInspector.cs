@@ -46,6 +46,13 @@ internal static unsafe class WindowInspector
         return hr.Succeeded && cloaked != 0;
     }
 
+    /// <summary>True if this window is actually Win32-visible right now. A tracked window can go
+    /// OS-hidden without a close -- e.g. an app that "closes" to a tray icon rather than quitting
+    /// -- and WindowManager keeps tracking it rather than dropping it (see OnWindowHidden), so
+    /// arrange/focus-cycling needs to exclude it the same way they already exclude a cloaked
+    /// window, or it would keep a layout slot (and focus eligibility) while genuinely invisible.</summary>
+    public static bool IsWindowVisible(HWND hwnd) => PInvoke.IsWindowVisible(hwnd);
+
     public static string GetWindowText(HWND hwnd)
     {
         Span<char> buffer = stackalloc char[256];
