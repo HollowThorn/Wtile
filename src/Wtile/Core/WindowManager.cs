@@ -29,6 +29,7 @@ internal sealed unsafe class WindowManager
     private IReadOnlyList<CompiledTagRule> _tagRules = [];
     private bool _rulesNeedProcessName; // resolving one costs a syscall; skipped unless some rule reads it
     private List<Monitor> _monitors = [];
+    private bool _suppressMonitorFollow; // see OnWindowDestroyed/OnForegroundChanged
 
     public WindowManager(LayoutRegistry layouts, string defaultLayoutName, IReadOnlyDictionary<string, double> defaultLayoutParams, int tagCount = 9)
     {
@@ -425,6 +426,13 @@ internal sealed unsafe class WindowManager
 
     public void OnWindowDestroyed(HWND hwnd)
     {
+        // Closing the currently-focused window makes Windows immediately hand foreground to some
+        // other window -- often on a different monitor (e.g. the last-used one) -- which would
+        // otherwise drag selmon along via OnForegroundChanged below. dwm never moves selmon just
+        // because the last window on it closed, so suppress exactly that one follow-up jump.
+        if (hwnd == FocusedHandle)
+            _suppressMonitorFollow = true;
+
         _selfHidden.Remove(hwnd);
         if (Remove(hwnd))
             Arrange();
@@ -478,10 +486,17 @@ internal sealed unsafe class WindowManager
         FocusedTitle = WindowInspector.GetWindowText(hwnd);
 
         // dwm's selmon follows focus: hotkey commands should target whichever monitor the
-        // window you just focused is actually on.
+        // window you just focused is actually on -- except right after OnWindowDestroyed closed
+        // the previously-focused window, where this foreground change is just Windows picking
+        // *something* to focus next rather than real user intent to switch monitors.
         ManagedWindow? window = Find(hwnd);
         if (window is not null)
-            CurrentMonitorIndex = window.MonitorIndex;
+        {
+            if (_suppressMonitorFollow)
+                _suppressMonitorFollow = false;
+            else
+                CurrentMonitorIndex = window.MonitorIndex;
+        }
 
         Changed?.Invoke();
     }

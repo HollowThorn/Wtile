@@ -113,6 +113,16 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
             return;
         }
 
+        // Only the selected monitor (selmon) shows a focus border. Selmon can point elsewhere
+        // than the last actually-focused window -- e.g. focus-monitor onto a monitor with nothing
+        // tiled on it, where OS focus has nowhere to go and stays on the old monitor's window --
+        // and that old monitor should read as unselected rather than still showing focused.
+        if (focused.MonitorIndex != _manager.CurrentMonitorIndex)
+        {
+            Hide();
+            return;
+        }
+
         RECT r = WindowInspector.GetVisibleBounds(focused.Handle);
         int w = r.right - r.left;
         int h = r.bottom - r.top;
