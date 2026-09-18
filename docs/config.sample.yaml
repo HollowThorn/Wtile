@@ -63,7 +63,8 @@ general:
 #
 # follow: true switches to that monitor/tag as the window appears (dwm's switchtotag patch), so a
 # browser can pull you over while a terminal (follow left off, or false) opens quietly on its tag
-# for later. Never fires for windows already open when Wtile starts.
+# for later. Never fires for windows already open when Wtile starts, nor for the first window an
+# autostart: entry (below) opens.
 # A rule whose tag is outside 1..tagCount, or with every match field blank, is dropped with a
 # warning. Same inspect-window hotkey as for blacklist to find the exact names. Example:
 # tagRules:
@@ -73,6 +74,22 @@ general:
 #   - processName: "^wt\\.exe$"
 #     monitor: 2
 #     tag: 3
+
+# autostart: programs spawned once when Wtile starts (dwm's autostart patch), each "spawn" the same
+# [exe, args...] list a spawn hotkey takes. Never re-run on "reload" -- editing config shouldn't
+# relaunch your apps. Spawned last, after Wtile has picked up the windows already open, so
+# tagRules: above apply to whatever these open -- with one difference: the first window each entry
+# opens never pulls the view over, even under a follow: true rule (it still lands on the rule's
+# tag, it just waits there). Follow is for when *you* open the app, not for the desktop assembling
+# itself at login; from that window on the app follows normally. That first window is recognized
+# by exe name, taken from the spawned file name, so "processName" only needs setting when the
+# window belongs to a different exe -- packaged apps launched through an alias, like wt.exe whose
+# window is WindowsTerminal.exe's. inspect-window (Win+Shift+I) shows the real name. An entry with
+# nothing to spawn is dropped with a warning. Example:
+# autostart:
+#   - spawn: ["firefox.exe"]
+#   - spawn: ["wt.exe"]
+#     processName: "WindowsTerminal.exe"
 
 layouts:
   # Every tag starts on master-stack with these params (see hotkeys --- layout --- below for how

@@ -31,6 +31,8 @@ Actively developed, not yet a 1.0. Expect rough edges.
 - **Tag rules** (dwm's `rules[]`): map windows to a tag (and optionally a monitor) by process
   name, class, or title regex, so an app always opens on its own tag -- optionally switching the
   view there as it appears.
+- **Autostart** (dwm's autostart patch): programs spawned once at startup, placed by tag rules
+  but never pulling the view over while the desktop is still assembling itself at login.
 - **Multi-monitor**, dwm-style: each monitor gets its own tags and layout state off one shared
   config, with `focus-monitor`/`move-window-to-monitor` to move between them.
 - **Status bar** per monitor: tags (with an occupancy indicator), current layout symbol, focused

@@ -28,6 +28,7 @@ internal sealed unsafe class WindowManager
     private IReadOnlyList<CompiledWindowRule> _blacklist = [];
     private IReadOnlyList<CompiledTagRule> _tagRules = [];
     private bool _rulesNeedProcessName; // resolving one costs a syscall; skipped unless some rule reads it
+    private AutostartTracker _autostart = new([]); // see BeginAutostart
     private List<Monitor> _monitors = [];
     private bool _suppressMonitorFollow; // see OnWindowDestroyed/OnForegroundChanged
 
@@ -146,6 +147,12 @@ internal sealed unsafe class WindowManager
         _rulesNeedProcessName = _blacklist.Any(r => r.ProcessName is not null) || _tagRules.Any(r => r.Match.ProcessName is not null);
 
     public void SetRememberState(bool enabled) => RememberState = enabled;
+
+    /// <summary>Arms the autostart: check (see AutostartTracker) with the exe names Program.cs is
+    /// about to spawn. Called after Seed() on purpose: a window of the same exe that was already
+    /// open when Wtile started (a restart, not a login) must not consume the entry meant for the
+    /// one about to open -- that one would then follow.</summary>
+    public void BeginAutostart(IEnumerable<string> processNames) => _autostart = new AutostartTracker(processNames);
 
     public void SetHideTitlebars(bool hidden)
     {
@@ -946,15 +953,22 @@ internal sealed unsafe class WindowManager
             return;
         }
 
-        // Resolved once here and shared by the blacklist and tag rules below -- the only
-        // per-window syscall on this path, and only paid when some rule actually reads it.
-        string processName = _rulesNeedProcessName && WindowInspector.TryGetProcessName(hwnd, out string name) ? name : "";
+        // Resolved once here and shared by the blacklist, tag rules, and autostart check below --
+        // the only per-window syscall on this path, and only paid when some rule actually reads
+        // it or an autostart: entry is still waiting for its window.
+        string processName = (_rulesNeedProcessName || _autostart.PendingCount > 0) && WindowInspector.TryGetProcessName(hwnd, out string name) ? name : "";
 
         if (_blacklist.Count > 0 && WindowBlacklist.IsBlacklisted(_blacklist, processName, snapshot.ClassName, snapshot.Title))
         {
             Console.WriteLine($"[blacklist] Skipped '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}')");
             return;
         }
+
+        // The first window from an autostart: entry's exe is placed like any other, but never
+        // followed (below) -- after the blacklist so an excluded popup can't consume the entry.
+        bool fromAutostart = _autostart.TryConsume(processName);
+        if (fromAutostart)
+            Console.WriteLine($"[autostart] '{snapshot.Title}' (process='{processName}') opened; {_autostart.PendingCount} still pending");
 
         CompiledTagRule? tagRule = null;
         if (_tagRules.Count > 0 && WindowTagRules.TryResolve(_tagRules, processName, snapshot.ClassName, snapshot.Title, out CompiledTagRule matched))
@@ -992,10 +1006,11 @@ internal sealed unsafe class WindowManager
             // Arrange, which lays it out on whatever monitor MonitorIndex says). Follow
             // only on a live show event (arrange: true) -- never during Seed() at startup, where
             // every pre-existing mapped window would otherwise flip the view in turn (and any
-            // remembered active tag gets applied right after anyway). ActivateTag does the rest:
-            // hides the old tag's windows, arranges, and focuses the top of the stack, which is
-            // this window since it was just inserted at index 0.
-            if (tagRule.Follow && arrange)
+            // remembered active tag gets applied right after anyway) -- and never for the
+            // window an autostart: entry just opened, for the same reason. ActivateTag does the
+            // rest: hides the old tag's windows, arranges, and focuses the top of the stack,
+            // which is this window since it was just inserted at index 0.
+            if (tagRule.Follow && arrange && !fromAutostart)
             {
                 SelectMonitor(monitorIndex);
                 ActivateTag(tagRule.TagIndex);

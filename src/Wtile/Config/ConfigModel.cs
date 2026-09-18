@@ -12,6 +12,7 @@ public sealed class WtileConfig
     public List<HotkeyBinding> Hotkeys { get; set; } = [];
     public List<BlacklistRule> Blacklist { get; set; } = [];
     public List<TagRule> TagRules { get; set; } = [];
+    public List<AutostartEntry> Autostart { get; set; } = [];
 }
 
 public sealed class GeneralConfig
@@ -54,6 +55,21 @@ public sealed class GeneralConfig
     /// the tray toggle. A plain bool defaulting to false would silently unregister on the next
     /// reload after someone turned it on from the tray.</summary>
     public bool? LaunchOnBoot { get; set; }
+}
+
+/// <summary>One program spawned when Wtile starts (dwm's autostart patch); never re-run on
+/// reload (ConfigApplier doesn't touch autostart). Its first window is placed by tagRules: as
+/// usual but never followed -- see AutostartTracker.</summary>
+public sealed class AutostartEntry
+{
+    /// <summary>The same [exe, args...] list a "spawn" hotkey takes.</summary>
+    public List<string> Spawn { get; set; } = [];
+
+    /// <summary>Exe name whose window counts as this entry having opened. Blank (the default)
+    /// means the file name of Spawn[0], filled in by ConfigLoader.Validate; only needs setting
+    /// when the window belongs to a different exe than the one spawned, e.g. an app execution
+    /// alias (wt.exe launches WindowsTerminal.exe).</summary>
+    public string ProcessName { get; set; } = "";
 }
 
 public sealed class LayoutConfig

@@ -256,6 +256,45 @@ public class ConfigLoaderTests
     }
 
     [Fact]
+    public void ParsesAutostartSection_DefaultingProcessNameToSpawnedFileName()
+    {
+        const string yaml = """
+            autostart:
+              - spawn: ["firefox.exe"]
+              - spawn: ["wt.exe", "-p", "PowerShell"]
+                processName: "WindowsTerminal.exe"
+              - spawn: ["C:\\Tools\\Obsidian\\Obsidian.exe", "--minimize"]
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Empty(result.Warnings);
+        Assert.Equal(3, result.Config.Autostart.Count);
+        Assert.Equal(new[] { "firefox.exe" }, result.Config.Autostart[0].Spawn);
+        Assert.Equal("firefox.exe", result.Config.Autostart[0].ProcessName);
+        Assert.Equal(new[] { "wt.exe", "-p", "PowerShell" }, result.Config.Autostart[1].Spawn);
+        Assert.Equal("WindowsTerminal.exe", result.Config.Autostart[1].ProcessName);
+        Assert.Equal("Obsidian.exe", result.Config.Autostart[2].ProcessName);
+    }
+
+    [Fact]
+    public void AutostartEntryWithNothingToSpawn_IsDroppedWithWarning()
+    {
+        const string yaml = """
+            autostart:
+              - spawn: []
+              - processName: "orphan.exe"
+              - spawn: ["wt.exe"]
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.Single(result.Config.Autostart);
+        Assert.Equal("wt.exe", result.Config.Autostart[0].ProcessName);
+        Assert.Equal(2, result.Warnings.Count(w => w.Contains("autostart")));
+    }
+
+    [Fact]
     public void NegativeTagRuleMonitor_IsDroppedWithWarning()
     {
         const string yaml = """

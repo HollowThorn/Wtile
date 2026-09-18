@@ -102,6 +102,17 @@ if (manager.RememberState && WindowStateStore.TryLoad(statePath, out SavedState 
 manager.OnForegroundChanged(PInvoke.GetForegroundWindow()); // seed initial title; the hook only fires on subsequent changes
 Console.WriteLine($"Tracking {manager.Windows.Count} window(s). Config: {configPath}. Waiting for events...");
 
+// autostart: spawned last, once everything above is in place, so tagRules: apply to whatever these
+// open and rememberState has already claimed the windows that were open before us. Goes through
+// the same "spawn" command a hotkey uses. Reload never re-runs this (ConfigApplier doesn't touch
+// autostart) -- editing config shouldn't relaunch your apps.
+if (initial.Config.Autostart.Count > 0)
+{
+    manager.BeginAutostart(initial.Config.Autostart.Select(e => e.ProcessName));
+    foreach (AutostartEntry entry in initial.Config.Autostart)
+        commands.TryExecute("spawn", entry.Spawn);
+}
+
 while (true)
 {
     int result = PInvoke.GetMessage(out MSG msg, HWND.Null, 0, 0);

@@ -162,6 +162,25 @@ public static class ConfigLoader
             }
         }
         config.TagRules = validTagRules;
+
+        var validAutostart = new List<AutostartEntry>(config.Autostart.Count);
+        foreach (AutostartEntry entry in config.Autostart)
+        {
+            if (entry.Spawn.Count == 0 || string.IsNullOrWhiteSpace(entry.Spawn[0]))
+            {
+                warnings.Add("An autostart entry has nothing to spawn; ignored.");
+                continue;
+            }
+            // Its window is recognized by exe name (see AutostartTracker), which for a bare
+            // "firefox.exe" or a full path is just the file name -- so processName: only needs
+            // setting when the window belongs to another exe than the one spawned. Both slash
+            // kinds are split on explicitly (rather than Path.GetFileName) so this reads a
+            // Windows path the same way when the tests run on Linux.
+            if (string.IsNullOrWhiteSpace(entry.ProcessName))
+                entry.ProcessName = entry.Spawn[0][(entry.Spawn[0].LastIndexOfAny(['\\', '/']) + 1)..];
+            validAutostart.Add(entry);
+        }
+        config.Autostart = validAutostart;
     }
 
     private static bool IsValidPattern(string pattern, string sectionName, string fieldName, List<string> warnings)
