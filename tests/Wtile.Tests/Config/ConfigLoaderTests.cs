@@ -118,6 +118,28 @@ public class ConfigLoaderTests
         Assert.Contains(result.Warnings, w => w.Contains("focusedBorderWidth"));
     }
 
+    // Omitted means StartupRegistration.ApplyConfig leaves the Run key alone -- so a config written
+    // before launchOnBoot existed (or the shipped sample, which keeps it commented out) never
+    // registers Wtile at login by itself; only the tray toggle or an explicit true does.
+    [Fact]
+    public void LaunchOnBoot_OmittedIsNull_SoExistingConfigsStayOff()
+    {
+        Assert.Null(ConfigLoader.Load("general:\n  tagCount: 9\n").Config.General.LaunchOnBoot);
+        Assert.Null(ConfigLoader.Load("").Config.General.LaunchOnBoot);
+        Assert.Null(ConfigLoader.LoadFromFile(SampleConfigPath).Config.General.LaunchOnBoot);
+    }
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void LaunchOnBoot_ExplicitValueIsParsed(string value, bool expected)
+    {
+        ConfigLoadResult result = ConfigLoader.Load($"general:\n  launchOnBoot: {value}\n");
+
+        Assert.Equal(expected, result.Config.General.LaunchOnBoot);
+        Assert.Empty(result.Warnings);
+    }
+
     [Fact]
     public void InvalidBarPosition_DefaultsToTopWithWarning()
     {
