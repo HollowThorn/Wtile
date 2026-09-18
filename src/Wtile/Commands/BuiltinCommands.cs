@@ -246,6 +246,15 @@ internal sealed class ToggleTaskbarCommand(WindowManager manager) : ICommand
     public void Execute(IReadOnlyList<string> args) => manager.ToggleTaskbar();
 }
 
+/// <summary>Flips whether Wtile starts at Windows login (per-user Run key, see
+/// StartupRegistration). What the tray menu's "Launch on boot" item runs; bindable as a hotkey
+/// too. An explicit general.launchOnBoot puts it back on the next reload -- see ConfigModel.</summary>
+internal sealed class ToggleLaunchOnBootCommand : ICommand
+{
+    public string Name => "toggle-launch-on-boot";
+    public void Execute(IReadOnlyList<string> args) => StartupRegistration.SetEnabled(!StartupRegistration.IsEnabled());
+}
+
 /// <summary>Prints the focused window's process/class/title to the console -- lets you copy exact
 /// values straight into a blacklist: or tagRules: rule instead of guessing or reaching for Spy++.</summary>
 internal sealed class InspectWindowCommand : ICommand
@@ -347,6 +356,7 @@ internal static class BuiltinCommands
         registry.Register(new SpawnCommand());
         registry.Register(new QuitCommand());
         registry.Register(new ToggleTaskbarCommand(manager));
+        registry.Register(new ToggleLaunchOnBootCommand());
         registry.Register(new InspectWindowCommand());
         return registry;
     }

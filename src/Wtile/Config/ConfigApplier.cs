@@ -30,6 +30,7 @@ internal sealed class ConfigApplier(WindowManager manager, IReadOnlyList<BarWind
         manager.SetBlacklist(WindowRuleCompiler.CompileBlacklist(config.Blacklist));
         manager.SetTagRules(WindowRuleCompiler.CompileTagRules(config.TagRules));
         manager.SetRememberState(config.General.RememberState);
+        StartupRegistration.ApplyConfig(config.General.LaunchOnBoot);
         focusBorder.ApplyConfig(config.General);
         foreach (BarWindow bar in bars)
             bar.ApplyConfig(config.Bar);

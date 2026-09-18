@@ -50,6 +50,8 @@ Actively developed, not yet a 1.0. Expect rough edges.
 - Optional **session persistence** (`rememberState`): remembers which monitor/tag each window was
   on, plus its floating/pinned state, across quit/restart and "reload" — matched back to reopened
   windows by process name + window class.
+- Optional **launch on boot**: a "Launch on boot" toggle in the tray icon's right-click menu (or
+  `launchOnBoot` in config) registers Wtile in the per-user Run key so it starts with Windows.
 
 
 ## Download
