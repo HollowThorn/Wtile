@@ -95,8 +95,41 @@ commands.Register(new ReloadCommand(configPath, applier, bars, manager, statePat
 
 using var tray = new TrayIcon(commands);
 
-manager.Seed();
-if (manager.RememberState && WindowStateStore.TryLoad(statePath, out SavedState savedState))
+bool cleanedUp = false;
+
+// Un-hides whatever Wtile is currently keeping SW_HIDE'd for a tag switch and saves state.json,
+// same as a normal "quit". Idempotent and safe to call more than once (WM_QUERYENDSESSION can be
+// delivered once per top-level window, and a crash could reach both the exception handler and the
+// normal end of Main). This is a best-effort safety net for the cases a graceful "quit" command
+// can't reach on its own: an unhandled exception, or a logoff/shutdown/restart ending the session.
+// It does NOT and cannot cover Task Manager's "End Task" against an unresponsive process -- that's
+// a raw TerminateProcess, which runs no cleanup code in any process, on any OS, ever; the real
+// defense there is not freezing in the first place (see WindowManager.OnWindowShown's stale-event
+// guard) plus WindowManager.TryRecoverHidden re-adopting anything still left stranded at next launch.
+void CleanUpForExit()
+{
+    if (cleanedUp)
+        return;
+    cleanedUp = true;
+
+    if (manager.RememberState)
+        WindowStateStore.Save(statePath, manager.CaptureState());
+
+    manager.RestoreAllWindows(); // give windows on other tags back before we stop managing them
+    manager.SetHideTitlebars(false); // give windows their decorations back before we stop managing them
+    TaskbarController.SetVisible(true); // give the real taskbar back before we stop managing it
+}
+
+AppDomain.CurrentDomain.UnhandledException += (_, _) => CleanUpForExit();
+AppDomain.CurrentDomain.ProcessExit += (_, _) => CleanUpForExit();
+
+// Loaded before Seed() (and threaded through it) rather than after: a window state.json still
+// remembers but that's currently OS-hidden from an earlier run that didn't exit cleanly needs to
+// be un-hidden as part of Seed()'s own enumeration -- see WindowManager.TryRecoverHidden. Applying
+// saved placement (tag/monitor/floating/pinned) still happens afterwards, same as always.
+SavedState? savedState = manager.RememberState && WindowStateStore.TryLoad(statePath, out SavedState loaded) ? loaded : null;
+manager.Seed(savedState);
+if (savedState is not null)
     manager.ApplySavedState(savedState);
 manager.OnForegroundChanged(PInvoke.GetForegroundWindow()); // seed initial title; the hook only fires on subsequent changes
 Console.WriteLine($"Tracking {manager.Windows.Count} window(s). Config: {configPath}. Waiting for events...");
@@ -106,16 +139,18 @@ while (true)
     int result = PInvoke.GetMessage(out MSG msg, HWND.Null, 0, 0);
     if (result <= 0)
         break; // 0 = WM_QUIT, -1 = error
+
+    // The session ending may never post WM_QUIT at all, so act as soon as Windows announces it
+    // rather than waiting for one -- still translate/dispatch the message itself afterwards so
+    // DefWindowProc's default (allow the session to end) still runs.
+    if (msg.message == PInvoke.WM_QUERYENDSESSION || msg.message == PInvoke.WM_ENDSESSION)
+        CleanUpForExit();
+
     PInvoke.TranslateMessage(msg);
     PInvoke.DispatchMessage(msg);
 }
 
-if (manager.RememberState)
-    WindowStateStore.Save(statePath, manager.CaptureState());
-
-manager.RestoreAllWindows(); // give windows on other tags back before we stop managing them
-manager.SetHideTitlebars(false); // give windows their decorations back before we stop managing them
-TaskbarController.SetVisible(true); // give the real taskbar back before we stop managing it
+CleanUpForExit();
 
 foreach (BarWindow bar in bars)
     bar.Dispose();
