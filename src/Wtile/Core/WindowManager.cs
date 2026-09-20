@@ -31,6 +31,11 @@ internal sealed unsafe class WindowManager
     private List<Monitor> _monitors = [];
     private bool _suppressMonitorFollow; // see OnWindowDestroyed/OnForegroundChanged
 
+    /// <summary>Only non-null while Seed() is enumerating, and only when a state.json was loaded:
+    /// (processName, className) pairs from that saved state, consumed (removed) one at a time as
+    /// they're matched -- see TryRecoverHidden.</summary>
+    private List<(string ProcessName, string ClassName)>? _recoverySignatures;
+
     public WindowManager(LayoutRegistry layouts, string defaultLayoutName, IReadOnlyDictionary<string, double> defaultLayoutParams, int tagCount = 9)
     {
         _layouts = layouts;
@@ -243,10 +248,20 @@ internal sealed unsafe class WindowManager
         Arrange();
     }
 
-    /// <summary>Populates the initial window set from already-open windows, then arranges.</summary>
-    public void Seed()
+    /// <summary>Populates the initial window set from already-open windows, then arranges. When
+    /// <paramref name="savedState"/> is given (general.rememberState, a loaded state.json), a
+    /// window that's currently OS-hidden but matches one of its records is un-hidden and adopted
+    /// too -- see TryRecoverHidden -- rather than silently skipped like an ordinary hidden window.
+    /// Caller applies the rest of <paramref name="savedState"/> (tag/monitor/floating/pinned)
+    /// afterwards via ApplySavedState, same as always.</summary>
+    public void Seed(SavedState? savedState = null)
     {
+        _recoverySignatures = savedState?.Windows
+            .Where(w => !string.IsNullOrEmpty(w.ProcessName))
+            .Select(w => (w.ProcessName, w.ClassName))
+            .ToList();
         PInvoke.EnumWindows(&EnumWindowsProc, 0);
+        _recoverySignatures = null;
         Arrange();
     }
 
@@ -406,6 +421,19 @@ internal sealed unsafe class WindowManager
         // no-op on an already-tracked window and leave it stuck.
         if (Find(hwnd) is { } window)
         {
+            // EVENT_OBJECT_SHOW is delivered out-of-context (see WinEventTracker), i.e.
+            // asynchronously -- real Win32 visibility flips the instant ShowWindow/SetWindowPos
+            // runs, but the notification can arrive noticeably later, especially under load (e.g.
+            // several tag switches fired in quick succession). By the time a stale one is
+            // processed here, a later tag switch may have already hidden this same window again
+            // for real. Trusting the stale event and "following" it back to its tag would hide/
+            // show a whole new wave of windows, generating more events that can trigger the same
+            // thing again -- a self-sustaining storm of tag switches that pins the message pump
+            // and looks like windows switching on their own. Bail out if it isn't actually visible
+            // right now; a genuine external show (the browser case) always still reads visible.
+            if (!WindowInspector.IsWindowVisible(hwnd))
+                return;
+
             Monitor monitor = _monitors[window.MonitorIndex];
             if (!window.IsPinned && !monitor.IsViewingAllTags && window.TagIndex != monitor.ActiveTagIndex)
             {
@@ -932,6 +960,9 @@ internal sealed unsafe class WindowManager
             return; // idempotent: a single user action can fire several hook events for one window
 
         WindowSnapshot snapshot = WindowInspector.Describe(hwnd);
+        if (!snapshot.IsVisible)
+            TryRecoverHidden(hwnd, ref snapshot);
+
         if (!WindowFilter.IsManageable(snapshot))
         {
             // Only titled windows -- most filtered-out windows are untitled shell/helper surfaces
@@ -1009,6 +1040,40 @@ internal sealed unsafe class WindowManager
 
         if (arrange)
             Arrange();
+    }
+
+    /// <summary>A window Wtile itself hid for a tag switch (SW_HIDE) stays OS-hidden forever if
+    /// Wtile never gets the chance to un-hide it again -- killed via Task Manager, crashed, or the
+    /// PC lost power mid-switch. Nothing else in Windows will ever call ShowWindow on it, and
+    /// WindowFilter.IsManageable rejects invisible windows outright, so a fresh Wtile instance
+    /// would otherwise never see it again: still running, as far as Windows is concerned, but
+    /// permanently untiled and unreachable -- no tag, no taskbar button, gone. Recognized here,
+    /// during Seed() only, by matching against the previous session's state.json the same way
+    /// ApplySavedState does (process name + window class): only ever un-hides a window that
+    /// Wtile's own saved state says it was actively managing, never some unrelated window that
+    /// happens to share a class -- e.g. an app's own background helper window it deliberately
+    /// keeps hidden must not get force-shown just because state.json remembers a same-class window
+    /// from a previous run.</summary>
+    private void TryRecoverHidden(HWND hwnd, ref WindowSnapshot snapshot)
+    {
+        if (_recoverySignatures is not { Count: > 0 })
+            return;
+
+        // Check manageability as if it were visible before touching anything -- a window that
+        // wouldn't qualify anyway (wrong class, owned, cloaked, ...) is left exactly as it is.
+        WindowSnapshot asVisible = snapshot with { IsVisible = true };
+        if (!WindowFilter.IsManageable(asVisible))
+            return;
+
+        if (!WindowInspector.TryGetProcessName(hwnd, out string processName) || processName.Length == 0)
+            return;
+        if (!_recoverySignatures.Remove((processName, snapshot.ClassName)))
+            return;
+
+        Console.WriteLine($"[recover] Un-hiding '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}') -- "
+            + "left OS-hidden by a previous run that didn't exit cleanly.");
+        ShowManagedWindow(hwnd);
+        snapshot = asVisible;
     }
 
     private int ResolveMonitorIndex(HWND hwnd)
