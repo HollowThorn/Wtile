@@ -496,12 +496,19 @@ internal sealed unsafe class WindowManager
         // other window -- often on a different monitor (e.g. the last-used one) -- which would
         // otherwise drag selmon along via OnForegroundChanged below. dwm never moves selmon just
         // because the last window on it closed, so suppress exactly that one follow-up jump.
-        if (hwnd == FocusedHandle)
+        bool wasFocused = hwnd == FocusedHandle;
+        if (wasFocused)
             _suppressMonitorFollow = true;
 
         _selfHidden.Remove(hwnd);
-        if (Remove(hwnd))
-            Arrange();
+        if (!Remove(hwnd))
+            return;
+        Arrange();
+
+        // dwm's unmanage() -> focus(NULL): Windows' own pick can be a window on another monitor,
+        // so choose the replacement here (this monitor's stack, or the desktop if it's empty).
+        if (wasFocused)
+            FocusSomethingOnCurrentMonitor();
     }
 
     public void OnMinimizeChanged(HWND hwnd, bool minimized)
@@ -543,6 +550,7 @@ internal sealed unsafe class WindowManager
         // "Program Manager".
         if (hwnd == PInvoke.GetShellWindow())
         {
+            _suppressMonitorFollow = false; // this was the one follow-up event; don't leak it to the next
             FocusedHandle = HWND.Null;
             FocusedTitle = "";
             Changed?.Invoke();
