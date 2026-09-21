@@ -398,6 +398,11 @@ internal sealed unsafe class WindowManager
                 PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_HIDE);
             }
         }
+
+        // Same as every other path that hides the focused window: hand focus on, don't leave it.
+        ManagedWindow? focused = Find(FocusedHandle);
+        if (focused is not null && !IsVisibleOn(focused, _monitors[focused.MonitorIndex], focused.MonitorIndex))
+            FocusSomethingOnCurrentMonitor();
     }
 
     /// <summary>An already-tracked window we're deliberately keeping hidden for a tag switch (see
@@ -546,11 +551,23 @@ internal sealed unsafe class WindowManager
         if (IgnoredFocusHandles.Contains(hwnd))
             return;
 
-        // Windows' own pick after the focused window closed reaches us before that window's
-        // EVENT_OBJECT_DESTROY does. Handle the close now, so the replacement is ours rather than
-        // whatever Windows chose (often a window on another monitor) -- see OnWindowDestroyed.
-        if (hwnd != FocusedHandle && Find(FocusedHandle) is not null && !PInvoke.IsWindow(FocusedHandle))
-            OnWindowDestroyed(FocusedHandle);
+        // The focused window went away (closed, or hid itself) and this is Windows' own pick of
+        // what to focus next -- often a window on another monitor, and it reaches us before the
+        // window's own destroy event. Unless the pick is already on this monitor's active tag,
+        // choose the replacement ourselves (see OnWindowDestroyed).
+        ManagedWindow? previous = Find(FocusedHandle);
+        if (previous is not null && hwnd != FocusedHandle && !WindowInspector.IsWindowVisible(previous.Handle))
+        {
+            ManagedWindow? picked = Find(hwnd);
+            if (picked is null || !IsVisibleOn(picked, CurrentMonitor, CurrentMonitorIndex))
+            {
+                if (PInvoke.IsWindow(previous.Handle))
+                    FocusSomethingOnCurrentMonitor();
+                else
+                    OnWindowDestroyed(previous.Handle); // its destroy event is still queued behind this one
+                return;
+            }
+        }
 
         // Desktop focused = no client selected (dwm's root window), not a window called
         // "Program Manager".
@@ -821,13 +838,17 @@ internal sealed unsafe class WindowManager
         List<ManagedWindow> visible = VisibleWindowsOnCurrentMonitor();
         HWND remembered = CurrentTag.LastFocusedHandle;
         ManagedWindow? target = visible.Find(w => w.Handle == remembered) ?? (visible.Count > 0 ? visible[0] : null);
+        // Record the choice up front rather than waiting on its foreground event, which may be
+        // late or never come; the event then just confirms it.
         if (target is not null)
         {
+            FocusedHandle = target.Handle;
+            FocusedTitle = target.Title;
             WindowInspector.ForceSetForegroundWindow(target.Handle);
+            Changed?.Invoke();
             return;
         }
 
-        // Clear up front; the desktop's foreground event may never arrive.
         FocusedHandle = HWND.Null;
         FocusedTitle = "";
         HWND desktop = PInvoke.GetShellWindow();
@@ -857,13 +878,17 @@ internal sealed unsafe class WindowManager
         // Unpinning while away from the window's own tag: it was only visible by virtue of being
         // pinned, so it needs to actually disappear now, not just stop being tiled -- unless
         // we're viewing all tags, in which case everything stays visible regardless.
-        if (!window.IsPinned && !monitor.IsViewingAllTags && window.TagIndex != monitor.ActiveTagIndex)
+        bool hidden = !window.IsPinned && !monitor.IsViewingAllTags && window.TagIndex != monitor.ActiveTagIndex;
+        if (hidden)
         {
             _selfHidden.Add(window.Handle);
             PInvoke.ShowWindow(window.Handle, SHOW_WINDOW_CMD.SW_HIDE);
         }
 
         Arrange();
+
+        if (hidden)
+            FocusSomethingOnCurrentMonitor();
     }
 
     /// <summary>Views the tag <paramref name="delta"/> positions away (wrapping), e.g. dwm's/bug.n's shiftview.</summary>
