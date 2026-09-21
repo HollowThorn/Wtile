@@ -36,7 +36,7 @@ jobs:
         run: dotnet publish src/Wtile/Wtile.csproj -c Release -r win-x64 --self-contained -o publish
 
       - name: Zip
-        run: Compress-Archive -Path publish/* -DestinationPath Wtile-win-x64-dev.zip
+        run: Compress-Archive -Path publish/Wtile.exe -DestinationPath Wtile-win-x64-dev.zip
 
       - name: Move dev tag to this commit
         run: |
