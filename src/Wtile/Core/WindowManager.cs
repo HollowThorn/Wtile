@@ -539,10 +539,8 @@ internal sealed unsafe class WindowManager
         if (IgnoredFocusHandles.Contains(hwnd))
             return;
 
-        // The desktop taking foreground is dwm's "root window has focus": no client is selected.
-        // Reached both by clicking the desktop and by FocusSomethingOnCurrentMonitor landing on an
-        // empty tag. Recording it as a focused window would put "Program Manager" in the bar's
-        // title segment and, worse, leave a stale-looking-but-real FocusedHandle for hotkeys.
+        // Desktop focused = no client selected (dwm's root window), not a window called
+        // "Program Manager".
         if (hwnd == PInvoke.GetShellWindow())
         {
             FocusedHandle = HWND.Null;
@@ -684,9 +682,7 @@ internal sealed unsafe class WindowManager
 
         Arrange();
 
-        // dwm's tag(): the view stays put, so the window that just left needs to hand focus to
-        // whatever is still here. Without this the moved window stayed "focused" from Wtile's
-        // point of view despite being hidden (see FocusSomethingOnCurrentMonitor).
+        // dwm's tag(): the view stays put, so the window that left must hand focus over.
         if (!IsVisibleOn(window, _monitors[window.MonitorIndex], window.MonitorIndex))
             FocusSomethingOnCurrentMonitor();
     }
@@ -801,24 +797,11 @@ internal sealed unsafe class WindowManager
         _windows.FindAll(w => IsVisibleOn(w, CurrentMonitor, CurrentMonitorIndex) && !w.IsMinimized
             && !WindowInspector.IsCloaked(w.Handle) && WindowInspector.IsWindowVisible(w.Handle));
 
-    /// <summary>dwm's focus(NULL) after a view()/tag(): the window that had focus just got hidden
-    /// or sent away, so pick its replacement on the current monitor ourselves rather than leaving
-    /// it to Windows. FocusedHandle is only ever written by OnForegroundChanged, and hiding a
-    /// foreign foreground window from our process doesn't reliably produce an
-    /// EVENT_SYSTEM_FOREGROUND for anything managed -- Windows may activate the desktop, the
-    /// taskbar, or nothing at all. Left alone, FocusedHandle kept pointing at the now-invisible
-    /// window, so the bar/focus border kept showing it and every focused-window hotkey (close,
-    /// shuffle, move again) silently acted on something you couldn't see. Prefers the active
-    /// tag's own last-focused window (see OnForegroundChanged) over top-of-stack, so switching
-    /// away and back doesn't lose which window you actually had selected there -- same as dwm's
-    /// per-tag "sel".
-    ///
-    /// An empty tag still has to take focus *away*: Windows leaves the hidden window as the real
-    /// foreground window, so keystrokes keep going to something you can't see and Wtile's
-    /// bookkeeping keeps naming it. dwm's focus(NULL) proper hands focus to the root window; the
-    /// closest thing here is the shell's desktop window (GetShellWindow), which
-    /// OnForegroundChanged then treats as "nothing selected" rather than as a window called
-    /// "Program Manager".</summary>
+    /// <summary>dwm's focus(NULL): the focused window was just hidden, so pick its replacement
+    /// ourselves -- hiding a foreign foreground window doesn't reliably make Windows focus
+    /// anything else, which left FocusedHandle stuck on an invisible window. Prefers the tag's
+    /// last-focused window (dwm's per-tag "sel") over top-of-stack. With nothing left, focus goes
+    /// to the desktop so keystrokes stop reaching the hidden window.</summary>
     private void FocusSomethingOnCurrentMonitor()
     {
         List<ManagedWindow> visible = VisibleWindowsOnCurrentMonitor();
@@ -830,9 +813,7 @@ internal sealed unsafe class WindowManager
             return;
         }
 
-        // Clear our side up front rather than waiting on the EVENT_SYSTEM_FOREGROUND for the
-        // desktop -- that event is the same unreliable one the whole helper exists to not depend
-        // on, and if it never comes the bar/hotkeys would otherwise keep the hidden window.
+        // Clear up front; the desktop's foreground event may never arrive.
         FocusedHandle = HWND.Null;
         FocusedTitle = "";
         HWND desktop = PInvoke.GetShellWindow();
