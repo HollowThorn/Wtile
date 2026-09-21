@@ -671,6 +671,12 @@ internal sealed unsafe class WindowManager
         }
 
         Arrange();
+
+        // dwm's tag(): the view stays put, so the window that just left needs to hand focus to
+        // whatever is still here. Without this the moved window stayed "focused" from Wtile's
+        // point of view despite being hidden (see FocusSomethingOnCurrentMonitor).
+        if (!IsVisibleOn(window, _monitors[window.MonitorIndex], window.MonitorIndex))
+            FocusSomethingOnCurrentMonitor();
     }
 
     /// <summary>Excludes/re-includes the focused window from tiling; it keeps whatever rect it had.</summary>
@@ -783,6 +789,26 @@ internal sealed unsafe class WindowManager
         _windows.FindAll(w => IsVisibleOn(w, CurrentMonitor, CurrentMonitorIndex) && !w.IsMinimized
             && !WindowInspector.IsCloaked(w.Handle) && WindowInspector.IsWindowVisible(w.Handle));
 
+    /// <summary>dwm's focus(NULL) after a view()/tag(): the window that had focus just got hidden
+    /// or sent away, so pick its replacement on the current monitor ourselves rather than leaving
+    /// it to Windows. FocusedHandle is only ever written by OnForegroundChanged, and hiding a
+    /// foreign foreground window from our process doesn't reliably produce an
+    /// EVENT_SYSTEM_FOREGROUND for anything managed -- Windows may activate the desktop, the
+    /// taskbar, or nothing at all. Left alone, FocusedHandle kept pointing at the now-invisible
+    /// window, so the bar/focus border kept showing it and every focused-window hotkey (close,
+    /// shuffle, move again) silently acted on something you couldn't see. Prefers the active
+    /// tag's own last-focused window (see OnForegroundChanged) over top-of-stack, so switching
+    /// away and back doesn't lose which window you actually had selected there -- same as dwm's
+    /// per-tag "sel". An empty tag has nothing to hand focus to, so it's left alone.</summary>
+    private void FocusSomethingOnCurrentMonitor()
+    {
+        List<ManagedWindow> visible = VisibleWindowsOnCurrentMonitor();
+        HWND remembered = CurrentTag.LastFocusedHandle;
+        ManagedWindow? target = visible.Find(w => w.Handle == remembered) ?? (visible.Count > 0 ? visible[0] : null);
+        if (target is not null)
+            WindowInspector.ForceSetForegroundWindow(target.Handle);
+    }
+
     /// <summary>True if this window is currently supposed to be visible on this specific monitor:
     /// on its active tag, pinned (bug.n's "pin" -- visible/tiled on every tag regardless of its
     /// own TagIndex, but not across monitors), or every tag is while
@@ -888,18 +914,10 @@ internal sealed unsafe class WindowManager
         // dwm's view(): landing on a tag focuses something there rather than leaving Windows to
         // pick whatever it wants once the old focus target gets hidden -- unless the
         // previously-focused window is still visible here (e.g. it's pinned), in which case it
-        // keeps focus untouched. Prefers the tag's own last-focused window (see
-        // OnForegroundChanged) over top-of-stack, so switching away and back doesn't lose which
-        // window you actually had selected there -- same as dwm's per-tag "sel".
+        // keeps focus untouched.
         bool previousStillVisible = previouslyFocused is not null && IsVisibleOn(previouslyFocused, monitor, monitorIndex);
         if (!previousStillVisible)
-        {
-            List<ManagedWindow> visible = VisibleWindowsOnCurrentMonitor();
-            HWND remembered = monitor.Tags[tagIndex].LastFocusedHandle;
-            ManagedWindow? target = visible.Find(w => w.Handle == remembered) ?? (visible.Count > 0 ? visible[0] : null);
-            if (target is not null)
-                WindowInspector.ForceSetForegroundWindow(target.Handle);
-        }
+            FocusSomethingOnCurrentMonitor();
 
         Changed?.Invoke();
     }
