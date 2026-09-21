@@ -49,6 +49,7 @@ PostQuitMessage
 IDC_ARROW
 GetSystemMetrics
 GetForegroundWindow
+GetShellWindow
 SetWindowPos
 PostMessage
 WM_PAINT

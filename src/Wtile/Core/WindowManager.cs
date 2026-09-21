@@ -539,6 +539,18 @@ internal sealed unsafe class WindowManager
         if (IgnoredFocusHandles.Contains(hwnd))
             return;
 
+        // The desktop taking foreground is dwm's "root window has focus": no client is selected.
+        // Reached both by clicking the desktop and by FocusSomethingOnCurrentMonitor landing on an
+        // empty tag. Recording it as a focused window would put "Program Manager" in the bar's
+        // title segment and, worse, leave a stale-looking-but-real FocusedHandle for hotkeys.
+        if (hwnd == PInvoke.GetShellWindow())
+        {
+            FocusedHandle = HWND.Null;
+            FocusedTitle = "";
+            Changed?.Invoke();
+            return;
+        }
+
         // Belt-and-suspenders fallback for WinEventTracker's EVENT_OBJECT_UNCLOAKED handler
         // (the correctly-timed fix for apps whose main window appears via a DWM "uncloak" rather
         // than a fresh SW_SHOW, e.g. Firefox): if a window somehow still isn't tracked by the
@@ -799,14 +811,34 @@ internal sealed unsafe class WindowManager
     /// shuffle, move again) silently acted on something you couldn't see. Prefers the active
     /// tag's own last-focused window (see OnForegroundChanged) over top-of-stack, so switching
     /// away and back doesn't lose which window you actually had selected there -- same as dwm's
-    /// per-tag "sel". An empty tag has nothing to hand focus to, so it's left alone.</summary>
+    /// per-tag "sel".
+    ///
+    /// An empty tag still has to take focus *away*: Windows leaves the hidden window as the real
+    /// foreground window, so keystrokes keep going to something you can't see and Wtile's
+    /// bookkeeping keeps naming it. dwm's focus(NULL) proper hands focus to the root window; the
+    /// closest thing here is the shell's desktop window (GetShellWindow), which
+    /// OnForegroundChanged then treats as "nothing selected" rather than as a window called
+    /// "Program Manager".</summary>
     private void FocusSomethingOnCurrentMonitor()
     {
         List<ManagedWindow> visible = VisibleWindowsOnCurrentMonitor();
         HWND remembered = CurrentTag.LastFocusedHandle;
         ManagedWindow? target = visible.Find(w => w.Handle == remembered) ?? (visible.Count > 0 ? visible[0] : null);
         if (target is not null)
+        {
             WindowInspector.ForceSetForegroundWindow(target.Handle);
+            return;
+        }
+
+        // Clear our side up front rather than waiting on the EVENT_SYSTEM_FOREGROUND for the
+        // desktop -- that event is the same unreliable one the whole helper exists to not depend
+        // on, and if it never comes the bar/hotkeys would otherwise keep the hidden window.
+        FocusedHandle = HWND.Null;
+        FocusedTitle = "";
+        HWND desktop = PInvoke.GetShellWindow();
+        if (!desktop.IsNull)
+            WindowInspector.ForceSetForegroundWindow(desktop);
+        Changed?.Invoke();
     }
 
     /// <summary>True if this window is currently supposed to be visible on this specific monitor:
