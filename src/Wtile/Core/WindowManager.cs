@@ -546,6 +546,12 @@ internal sealed unsafe class WindowManager
         if (IgnoredFocusHandles.Contains(hwnd))
             return;
 
+        // Windows' own pick after the focused window closed reaches us before that window's
+        // EVENT_OBJECT_DESTROY does. Handle the close now, so the replacement is ours rather than
+        // whatever Windows chose (often a window on another monitor) -- see OnWindowDestroyed.
+        if (hwnd != FocusedHandle && Find(FocusedHandle) is not null && !PInvoke.IsWindow(FocusedHandle))
+            OnWindowDestroyed(FocusedHandle);
+
         // Desktop focused = no client selected (dwm's root window), not a window called
         // "Program Manager".
         if (hwnd == PInvoke.GetShellWindow())

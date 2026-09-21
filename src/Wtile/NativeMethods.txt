@@ -1,6 +1,7 @@
 EnumDisplayMonitors
 EnumWindows
 IsWindowVisible
+IsWindow
 GetClassName
 GetWindowText
 GetWindow
