@@ -21,7 +21,8 @@ public sealed class GeneralConfig
     public int BorderGap { get; set; } = 0;
 
     /// <summary>Layout every tag on every monitor starts on -- one of the names registered in
-    /// LayoutRegistry (master-stack, master-stack-right, monocle, centered-master, vertical).
+    /// LayoutRegistry (master-stack, master-stack-right, monocle, centered-master, vertical,
+    /// deck, dwindle).
     /// Its nmaster/mfact/gap still come from the "master-stack" entry under layouts: below (every
     /// layout that uses those params reads the same one; per-tag/monitor layout config isn't
     /// supported yet). An unrecognized name is logged and that tag/monitor simply won't arrange

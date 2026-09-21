@@ -82,11 +82,14 @@ layouts:
   # per-tag values then diverge, including gap via adjust-gap/toggle-gap). "master-stack-right"
   # (master column on the right, "=[]"), "monocle" ("[M]", every window fullscreen, only the
   # focused one visible), "centered-master" ("|M|", master centered with stack windows
-  # alternating left/right of it), and "vertical" ("=", every window a full-width row, no master)
-  # are also registered and selectable via set-layout (Win+T / Win+M / Win+W / Win+Shift+V below)
-  # -- they don't need their own entry here: master-stack-right and centered-master reuse
-  # whichever nmaster/mfact/gap the tag already has (same params, just arranged differently),
-  # monocle ignores those params entirely, and vertical only looks at gap.
+  # alternating left/right of it), "vertical" ("=", every window a full-width row, no master),
+  # "deck" ("[D]", master tiles normally but stack windows overlap full-size behind each other,
+  # only the focused one visible), and "dwindle" ("[\]", windows spiral inward, each one taking
+  # half of whatever space is left) are also registered and selectable via set-layout (Win+T /
+  # Win+M / Win+W / Win+Shift+V / Win+Shift+D / Win+Shift+Y below) -- they don't need their own
+  # entry here: master-stack-right, centered-master, and deck reuse whichever nmaster/mfact/gap
+  # the tag already has (same params, just arranged differently), monocle ignores those params
+  # entirely, vertical only looks at gap, and dwindle only looks at mfact/gap (no nmaster).
   - name: master-stack
     symbol: "[]="
     nmaster: 1
@@ -217,6 +220,12 @@ hotkeys:
   - keys: "Win+Shift+V"
     command: set-layout            # every window gets a full-width row, stacked top to bottom
     args: ["vertical"]
+  - keys: "Win+Shift+D"
+    command: set-layout            # master tiles normally, stack windows overlap full-size behind
+    args: ["deck"]                 # each other -- only the focused stack window is visible
+  - keys: "Win+Shift+Y"
+    command: set-layout            # windows spiral inward, each new one taking half of what's left
+    args: ["dwindle"]
 
   # Gap controls: plain Win+= toggles, both adjustments take Shift.
   - keys: "Win+Shift+-"
