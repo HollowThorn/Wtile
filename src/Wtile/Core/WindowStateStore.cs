@@ -2,10 +2,15 @@ using System.Text.Json;
 
 namespace Wtile.Core;
 
-/// <summary>Reads/writes state.json (which monitor/tag each window was on -- see
-/// WindowManager.CaptureState/ApplySavedState). Never throws: a missing or corrupt file just
-/// means "nothing to restore", logged like every other soft-failure in Core (see the
-/// [filter]/[blacklist]/[manage] logs in WindowManager.TryAdd).</summary>
+/// <summary>Reads/writes state.json: which monitor/tag each window was on (see
+/// WindowManager.CaptureState/ApplySavedState, restored only when general.rememberState is on),
+/// plus each window's true original titlebar style. The file itself is always kept fresh
+/// (debounced, see Program.cs's ScheduleSafetySave wiring) and always consulted for recovery on
+/// startup regardless of rememberState -- an OS-hidden or titlebar-stripped window left stranded
+/// by an unclean exit is a correctness bug, not a placement-memory preference; see
+/// WindowManager.TryRecoverHidden. Never throws: a missing or corrupt file just means "nothing to
+/// restore", logged like every other soft-failure in Core (see the [filter]/[blacklist]/[manage]
+/// logs in WindowManager.TryAdd).</summary>
 public static class WindowStateStore
 {
     public static void Save(string path, SavedState state)

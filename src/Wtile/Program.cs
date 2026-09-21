@@ -96,6 +96,13 @@ commands.Register(new ReloadCommand(configPath, applier, bars, manager, statePat
 
 using var tray = new TrayIcon(commands);
 
+// Crash-safety net: keeps state.json fresh (debounced) during activity, not just at quit/reload,
+// so TryRecoverHidden has something recent to work with after an unclean exit -- see
+// WindowManager.ScheduleSafetySave. Always on, independent of general.rememberState (which only
+// controls whether ApplySavedState restores full tag/monitor/floating/pinned placement below).
+manager.Changed += manager.ScheduleSafetySave;
+manager.SafetySaveRequested += () => WindowStateStore.Save(statePath, manager.CaptureState());
+
 bool cleanedUp = false;
 
 // Un-hides whatever Wtile is currently keeping SW_HIDE'd for a tag switch and saves state.json,
@@ -113,8 +120,7 @@ void CleanUpForExit()
         return;
     cleanedUp = true;
 
-    if (manager.RememberState)
-        WindowStateStore.Save(statePath, manager.CaptureState());
+    WindowStateStore.Save(statePath, manager.CaptureState()); // always -- see the crash-safety note above
 
     manager.RestoreAllWindows(); // give windows on other tags back before we stop managing them
     manager.SetHideTitlebars(false); // give windows their decorations back before we stop managing them
@@ -125,12 +131,15 @@ AppDomain.CurrentDomain.UnhandledException += (_, _) => CleanUpForExit();
 AppDomain.CurrentDomain.ProcessExit += (_, _) => CleanUpForExit();
 
 // Loaded before Seed() (and threaded through it) rather than after: a window state.json still
-// remembers but that's currently OS-hidden from an earlier run that didn't exit cleanly needs to
-// be un-hidden as part of Seed()'s own enumeration -- see WindowManager.TryRecoverHidden. Applying
-// saved placement (tag/monitor/floating/pinned) still happens afterwards, same as always.
-SavedState? savedState = manager.RememberState && WindowStateStore.TryLoad(statePath, out SavedState loaded) ? loaded : null;
+// remembers but that's currently OS-hidden or titlebar-stripped from an earlier run that didn't
+// exit cleanly needs to be recovered as part of Seed()'s own enumeration -- see
+// WindowManager.TryRecoverHidden. Always attempted, independent of rememberState, since that
+// recovery is a correctness safety net, not the placement-memory preference rememberState
+// controls -- only applying the rest of savedState (tag/monitor/floating/pinned) below stays
+// gated on it.
+SavedState? savedState = WindowStateStore.TryLoad(statePath, out SavedState loaded) ? loaded : null;
 manager.Seed(savedState);
-if (savedState is not null)
+if (savedState is not null && manager.RememberState)
     manager.ApplySavedState(savedState);
 manager.OnForegroundChanged(PInvoke.GetForegroundWindow()); // seed initial title; the hook only fires on subsequent changes
 Console.WriteLine($"Tracking {manager.Windows.Count} window(s). Config: {configPath}. Waiting for events...");

@@ -24,7 +24,9 @@ Actively developed, not yet a 1.0. Expect rough edges.
 
 - **Dynamic tiling** with multiple layouts: master-stack (dwm's classic `[]=`, master column
   either side), monocle (`[M]`, one fullscreen window at a time), centered-master (`|M|`,
-  centered single window), and vertical-stack (`=`, full-width rows).
+  centered single window), vertical-stack (`=`, full-width rows), deck (`[D]`, master tiles
+  normally but stack windows overlap full-size behind each other), and dwindle (`[\]`, windows
+  spiral inward, each one taking half of whatever space is left).
 - **Tags, not virtual desktops** — dwm-style: each window belongs to a tag, tags are switched
   instantly, and each tag remembers its own layout, master count (`nmaster`), master/stack ratio
   (`mfact`), and gap independently.

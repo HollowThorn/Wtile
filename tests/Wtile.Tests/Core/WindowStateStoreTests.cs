@@ -27,6 +27,7 @@ public class WindowStateStoreTests
                         TagIndex = 2,
                         IsFloating = true,
                         IsPinned = false,
+                        OriginalStyle = 0x16CA0000,
                     },
                 ],
             };
@@ -50,6 +51,7 @@ public class WindowStateStoreTests
             Assert.Equal(2, w.TagIndex);
             Assert.True(w.IsFloating);
             Assert.False(w.IsPinned);
+            Assert.Equal(0x16CA0000, w.OriginalStyle);
         }
         finally
         {

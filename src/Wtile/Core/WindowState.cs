@@ -40,6 +40,11 @@ public sealed class SavedWindowState
     public int TagIndex { get; set; }
     public bool IsFloating { get; set; }
     public bool IsPinned { get; set; }
+
+    /// <summary>GWL_STYLE before any titlebar hiding, captured from ManagedWindow.OriginalStyle --
+    /// lets a crashed hideTitlebars session's windows get their true decorations back, instead of
+    /// a fresh instance adopting their already-stripped current style as the new baseline.</summary>
+    public int OriginalStyle { get; set; }
 }
 
 /// <summary>AOT-safe (reflection-free) JSON (de)serialization context for state.json -- mirrors
