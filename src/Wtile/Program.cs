@@ -72,6 +72,7 @@ manager.SetHideTitlebars(initial.Config.General.HideTitlebars);
 manager.SetBlacklist(WindowRuleCompiler.CompileBlacklist(initial.Config.Blacklist));
 manager.SetTagRules(WindowRuleCompiler.CompileTagRules(initial.Config.TagRules));
 manager.SetRememberState(initial.Config.General.RememberState);
+StartupRegistration.ApplyConfig(initial.Config.General.LaunchOnBoot);
 CommandRegistry commands = BuiltinCommands.CreateDefault(manager);
 using var tracker = new WinEventTracker();
 
