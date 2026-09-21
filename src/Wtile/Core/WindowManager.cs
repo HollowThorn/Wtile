@@ -32,9 +32,9 @@ internal sealed unsafe class WindowManager
     private bool _suppressMonitorFollow; // see OnWindowDestroyed/OnForegroundChanged
 
     /// <summary>Only non-null while Seed() is enumerating, and only when a state.json was loaded:
-    /// (processName, className) pairs from that saved state, consumed (removed) one at a time as
-    /// they're matched -- see TryRecoverHidden.</summary>
-    private List<(string ProcessName, string ClassName)>? _recoverySignatures;
+    /// (processName, className, originalStyle) triples from that saved state, consumed (removed)
+    /// one at a time as they're matched -- see TryRecoverHidden.</summary>
+    private List<(string ProcessName, string ClassName, int OriginalStyle)>? _recoverySignatures;
 
     public WindowManager(LayoutRegistry layouts, string defaultLayoutName, IReadOnlyDictionary<string, double> defaultLayoutParams, int tagCount = 9)
     {
@@ -249,16 +249,18 @@ internal sealed unsafe class WindowManager
     }
 
     /// <summary>Populates the initial window set from already-open windows, then arranges. When
-    /// <paramref name="savedState"/> is given (general.rememberState, a loaded state.json), a
-    /// window that's currently OS-hidden but matches one of its records is un-hidden and adopted
-    /// too -- see TryRecoverHidden -- rather than silently skipped like an ordinary hidden window.
-    /// Caller applies the rest of <paramref name="savedState"/> (tag/monitor/floating/pinned)
-    /// afterwards via ApplySavedState, same as always.</summary>
+    /// <paramref name="savedState"/> is given (a loaded state.json -- always attempted regardless
+    /// of general.rememberState, see Program.cs), a window that's currently OS-hidden but matches
+    /// one of its records is un-hidden, and any window (hidden or not) with a stripped titlebar
+    /// gets its true original style back too -- see TryRecoverHidden -- rather than being silently
+    /// adopted as-is like an ordinary freshly-seen window. Caller applies the rest of
+    /// <paramref name="savedState"/> (tag/monitor/floating/pinned) afterwards via ApplySavedState,
+    /// gated on rememberState same as always.</summary>
     public void Seed(SavedState? savedState = null)
     {
         _recoverySignatures = savedState?.Windows
             .Where(w => !string.IsNullOrEmpty(w.ProcessName))
-            .Select(w => (w.ProcessName, w.ClassName))
+            .Select(w => (w.ProcessName, w.ClassName, w.OriginalStyle))
             .ToList();
         PInvoke.EnumWindows(&EnumWindowsProc, 0);
         _recoverySignatures = null;
@@ -273,9 +275,10 @@ internal sealed unsafe class WindowManager
     }
 
     /// <summary>Snapshots which monitor/tag every currently-tracked window is on, for
-    /// WindowStateStore to write to state.json. Only called at quit/reload (see Program.cs/
-    /// ReloadCommand), so resolving each window's process name here (a syscall per window) is
-    /// cheap enough -- never done on the hot add/remove/arrange path.</summary>
+    /// WindowStateStore to write to state.json. Called at quit/reload and from a debounced timer
+    /// on every WindowManager.Changed (see ScheduleSafetySave) -- never synchronously on the hot
+    /// add/remove/arrange path itself, so resolving each window's process name here (a syscall per
+    /// window) stays cheap enough at realistic window counts.</summary>
     public SavedState CaptureState()
     {
         var state = new SavedState { IsTaskbarHidden = IsTaskbarHidden };
@@ -301,6 +304,7 @@ internal sealed unsafe class WindowManager
                 Title = w.Title,
                 MonitorIndex = w.MonitorIndex,
                 TagIndex = w.TagIndex,
+                OriginalStyle = w.OriginalStyle,
                 IsFloating = w.IsFloating,
                 IsPinned = w.IsPinned,
             });
@@ -468,6 +472,28 @@ internal sealed unsafe class WindowManager
     {
         PInvoke.KillTimer(HWND.Null, idEvent);
         Current?.Arrange();
+    }
+
+    private const nuint SafetySaveTimerId = 2;
+
+    /// <summary>Fired (debounced) whenever <see cref="Changed"/> fires, so Program.cs can flush
+    /// state.json well before a crash rather than only at quit/reload -- see
+    /// ScheduleSafetySave.</summary>
+    public event Action? SafetySaveRequested;
+
+    /// <summary>Schedules a safety-net state.json save ~1s from now, coalescing repeated calls the
+    /// same way ScheduleRearrange does (same hWnd/id resets the pending timer rather than
+    /// stacking) -- a burst of changes (e.g. a tag switch hiding several windows at once) costs
+    /// one write, not one per window, and this never lands on the hot path despite being wired to
+    /// fire on every Changed.</summary>
+    public void ScheduleSafetySave() =>
+        PInvoke.SetTimer(HWND.Null, SafetySaveTimerId, 1000, &SafetySaveTimerProc);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static void SafetySaveTimerProc(HWND hwnd, uint msg, nuint idEvent, uint dwTime)
+    {
+        PInvoke.KillTimer(HWND.Null, idEvent);
+        Current?.SafetySaveRequested?.Invoke();
     }
 
     public void OnWindowHidden(HWND hwnd)
@@ -991,8 +1017,9 @@ internal sealed unsafe class WindowManager
             return; // idempotent: a single user action can fire several hook events for one window
 
         WindowSnapshot snapshot = WindowInspector.Describe(hwnd);
-        if (!snapshot.IsVisible)
-            TryRecoverHidden(hwnd, ref snapshot);
+        // Unconditional (not just !snapshot.IsVisible): a visible-but-still-stripped titlebar
+        // survivor from a crashed session needs its style recovered too, not just an OS-hidden one.
+        TryRecoverHidden(hwnd, ref snapshot);
 
         if (!WindowFilter.IsManageable(snapshot))
         {
@@ -1073,14 +1100,16 @@ internal sealed unsafe class WindowManager
             Arrange();
     }
 
-    /// <summary>A window Wtile itself hid for a tag switch (SW_HIDE) stays OS-hidden forever if
-    /// Wtile never gets the chance to un-hide it again -- killed via Task Manager, crashed, or the
-    /// PC lost power mid-switch. Nothing else in Windows will ever call ShowWindow on it, and
-    /// WindowFilter.IsManageable rejects invisible windows outright, so a fresh Wtile instance
-    /// would otherwise never see it again: still running, as far as Windows is concerned, but
-    /// permanently untiled and unreachable -- no tag, no taskbar button, gone. Recognized here,
-    /// during Seed() only, by matching against the previous session's state.json the same way
-    /// ApplySavedState does (process name + window class): only ever un-hides a window that
+    /// <summary>A window Wtile itself hid for a tag switch (SW_HIDE), or stripped of its titlebar
+    /// (hideTitlebars), stays that way forever if Wtile never gets the chance to undo it -- killed
+    /// via Task Manager, crashed, or the PC lost power. Nothing else in Windows will ever call
+    /// ShowWindow/restore GWL_STYLE on it, and WindowFilter.IsManageable rejects invisible windows
+    /// outright, so a fresh Wtile instance would otherwise either never see a hidden one again
+    /// (still running, as far as Windows is concerned, but permanently untiled and unreachable --
+    /// no tag, no taskbar button, gone) or, for a visible-but-stripped one, silently adopt its
+    /// already-borderless style as the new "original," losing the real one for good. Recognized
+    /// here, during Seed() only, by matching against the previous session's state.json the same
+    /// way ApplySavedState does (process name + window class): only ever touches a window that
     /// Wtile's own saved state says it was actively managing, never some unrelated window that
     /// happens to share a class -- e.g. an app's own background helper window it deliberately
     /// keeps hidden must not get force-shown just because state.json remembers a same-class window
@@ -1098,13 +1127,25 @@ internal sealed unsafe class WindowManager
 
         if (!WindowInspector.TryGetProcessName(hwnd, out string processName) || processName.Length == 0)
             return;
-        if (!_recoverySignatures.Remove((processName, snapshot.ClassName)))
-            return;
 
-        Console.WriteLine($"[recover] Un-hiding '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}') -- "
-            + "left OS-hidden by a previous run that didn't exit cleanly.");
-        ShowManagedWindow(hwnd);
-        snapshot = asVisible;
+        string className = snapshot.ClassName;
+        int index = _recoverySignatures.FindIndex(s => s.ProcessName == processName && s.ClassName == className);
+        if (index < 0)
+            return;
+        int originalStyle = _recoverySignatures[index].OriginalStyle;
+        _recoverySignatures.RemoveAt(index);
+
+        // Always restore the true original style, whether or not this window was also OS-hidden --
+        // a visible hideTitlebars survivor needs this just as much as a hidden one.
+        WindowInspector.SetTitlebarHidden(hwnd, originalStyle, hidden: false);
+
+        if (!snapshot.IsVisible)
+        {
+            Console.WriteLine($"[recover] Un-hiding '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}') -- "
+                + "left OS-hidden by a previous run that didn't exit cleanly.");
+            ShowManagedWindow(hwnd);
+            snapshot = asVisible;
+        }
     }
 
     private int ResolveMonitorIndex(HWND hwnd)

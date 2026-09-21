@@ -284,10 +284,9 @@ internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IR
 
     public void Execute(IReadOnlyList<string> args)
     {
-        // Save with the pre-reload RememberState value, before config (which may flip it) is
-        // even read -- see WindowManager.RememberState / ApplySavedState.
-        if (manager.RememberState)
-            WindowStateStore.Save(statePath, manager.CaptureState());
+        // Always saved (crash-safety, independent of RememberState -- see Program.cs), before
+        // config (which may flip RememberState) is even read.
+        WindowStateStore.Save(statePath, manager.CaptureState());
 
         ConfigLoadResult result = ConfigLoader.LoadFromFile(configPath);
         foreach (string warning in result.Warnings)

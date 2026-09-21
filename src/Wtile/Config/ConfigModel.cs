@@ -42,10 +42,12 @@ public sealed class GeneralConfig
     /// <summary>Color of the focused-window border, as "#RRGGBB". Ignored if FocusedBorderWidth is 0.</summary>
     public string FocusedBorderColor { get; set; } = "#89b4fa";
 
-    /// <summary>Opt-in: on startup and on "reload", restores which monitor/tag each window was on
-    /// last time (matched to newly-opened windows by process name + window class), and saves that
-    /// placement to state.json on quit/reload. Off by default since it's new automatic-placement
-    /// behavior a user hasn't asked for yet.</summary>
+    /// <summary>Opt-in: on startup and on "reload", restores which monitor/tag/floating/pinned
+    /// state each window had last time (matched to newly-opened windows by process name + window
+    /// class). Off by default since it's automatic-placement behavior a user hasn't asked for yet.
+    /// Independent of this: state.json is always kept fresh and always consulted to recover a
+    /// window left OS-hidden or titlebar-stripped by an unclean exit -- that's a correctness
+    /// safety net, not something this setting controls (see WindowManager.TryRecoverHidden).</summary>
     public bool RememberState { get; set; } = false;
 
     /// <summary>Registers Wtile to start at Windows login (per-user Run key, see

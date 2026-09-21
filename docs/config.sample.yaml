@@ -22,10 +22,12 @@ general:
   # borderGap/layout gap is 0 or not). 0 disables it entirely.
   focusedBorderWidth: 2
   focusedBorderColor: "#89b4fa"
-  # Opt-in: remembers which monitor/tag each window was on (state.json, next to this config file),
-  # and restores it on startup and on "reload", matching saved windows to newly-opened ones by
-  # process name + window class (title isn't used -- it churns too much, e.g. browser tabs). Off
-  # by default.
+  # Opt-in: remembers which monitor/tag/floating/pinned state each window had (state.json, next to
+  # this config file), and restores it on startup and on "reload", matching saved windows to
+  # newly-opened ones by process name + window class (title isn't used -- it churns too much, e.g.
+  # browser tabs). Off by default. Independent of this: state.json is always kept fresh and always
+  # used to recover a window left OS-hidden or titlebar-stripped by an unclean exit -- that's a
+  # correctness safety net, not something this setting controls.
   rememberState: false
   # Starts Wtile at Windows login via the per-user Run registry key (no admin needed -- the same
   # thing Steam/Discord's "run at startup" checkbox does), pointing at whichever Wtile.exe is
