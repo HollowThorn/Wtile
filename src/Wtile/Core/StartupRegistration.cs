@@ -12,13 +12,26 @@ namespace Wtile.Core;
 ///
 /// The registered command is whichever exe is currently running (Environment.ProcessPath), so
 /// registering from a debug build in bin\ registers *that* build -- the path is logged whenever it
-/// changes so that's visible when it happens. Windows silently skips a Run entry whose exe has
-/// since moved or been deleted, so a stale one is dead rather than harmful.
+/// changes so that's visible when it happens. "Enabled" therefore means "*this* exe is the one
+/// registered", not "some Wtile is": with several builds around, each sharing the one value,
+/// another build's registration reads as off here, and ticking from this build overwrites it --
+/// the last build ticked from wins. Same for a stale entry whose exe has since moved (Windows
+/// silently skips those): reads as off, ticking on rewrites it.
 /// </summary>
 internal static class StartupRegistration
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "Wtile";
+
+    /// <summary>The value this exe registers under ValueName (quoted, since the install path has
+    /// spaces in it by default), and the one IsEnabled compares against. Null if the runtime
+    /// can't tell where this exe lives.</summary>
+    private static string? CurrentCommand =>
+        Environment.ProcessPath is string exePath ? $"\"{exePath}\"" : null;
+
+    private static bool IsCurrentCommand(object? registered) =>
+        registered is string value && CurrentCommand is string command
+        && string.Equals(value, command, StringComparison.OrdinalIgnoreCase); // NTFS paths are case-insensitive
 
     /// <summary>Reads as "off" if the registry can't be read for any reason -- a startup
     /// convenience must never take the window manager down over a tray click, same policy as
@@ -28,7 +41,7 @@ internal static class StartupRegistration
         try
         {
             using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKeyPath);
-            return key?.GetValue(ValueName) is string;
+            return IsCurrentCommand(key?.GetValue(ValueName));
         }
         catch (Exception ex)
         {
@@ -52,13 +65,12 @@ internal static class StartupRegistration
             using RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKeyPath);
             if (enabled)
             {
-                if (Environment.ProcessPath is not string exePath)
+                if (CurrentCommand is not string command)
                 {
                     Console.WriteLine("[launch-on-boot] Can't resolve this exe's path; not registered.");
                     return;
                 }
-                string command = $"\"{exePath}\"";
-                if (key.GetValue(ValueName) as string != command)
+                if (!IsCurrentCommand(key.GetValue(ValueName)))
                 {
                     key.SetValue(ValueName, command);
                     Console.WriteLine($"[launch-on-boot] Registered {command}");

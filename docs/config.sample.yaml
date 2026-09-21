@@ -31,7 +31,10 @@ general:
   # thing Steam/Discord's "run at startup" checkbox does), pointing at whichever Wtile.exe is
   # currently running. Left out (the default), the tray icon's right-click "Launch on boot" item
   # is the only control and Windows remembers whatever it last set. Set to true or false here and
-  # that wins on every startup and reload, silently undoing the tray toggle -- so pick one.
+  # that wins on every startup and reload, silently undoing the tray toggle -- so pick one. With
+  # several Wtile builds around (this config is shared by all of them), only one is ever
+  # registered: with "true" here it's whichever ran last, with the line left out it's whichever
+  # you last ticked from the tray -- the tick shows only the build you're in.
   # launchOnBoot: true
 
 # blacklist: exclude specific windows from tiling entirely, matched by regex against the
