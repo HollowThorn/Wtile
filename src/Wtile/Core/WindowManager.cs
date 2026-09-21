@@ -539,6 +539,16 @@ internal sealed unsafe class WindowManager
         if (IgnoredFocusHandles.Contains(hwnd))
             return;
 
+        // Desktop focused = no client selected (dwm's root window), not a window called
+        // "Program Manager".
+        if (hwnd == PInvoke.GetShellWindow())
+        {
+            FocusedHandle = HWND.Null;
+            FocusedTitle = "";
+            Changed?.Invoke();
+            return;
+        }
+
         // Belt-and-suspenders fallback for WinEventTracker's EVENT_OBJECT_UNCLOAKED handler
         // (the correctly-timed fix for apps whose main window appears via a DWM "uncloak" rather
         // than a fresh SW_SHOW, e.g. Firefox): if a window somehow still isn't tracked by the
@@ -671,6 +681,10 @@ internal sealed unsafe class WindowManager
         }
 
         Arrange();
+
+        // dwm's tag(): the view stays put, so the window that left must hand focus over.
+        if (!IsVisibleOn(window, _monitors[window.MonitorIndex], window.MonitorIndex))
+            FocusSomethingOnCurrentMonitor();
     }
 
     /// <summary>Excludes/re-includes the focused window from tiling; it keeps whatever rect it had.</summary>
@@ -783,6 +797,31 @@ internal sealed unsafe class WindowManager
         _windows.FindAll(w => IsVisibleOn(w, CurrentMonitor, CurrentMonitorIndex) && !w.IsMinimized
             && !WindowInspector.IsCloaked(w.Handle) && WindowInspector.IsWindowVisible(w.Handle));
 
+    /// <summary>dwm's focus(NULL): the focused window was just hidden, so pick its replacement
+    /// ourselves -- hiding a foreign foreground window doesn't reliably make Windows focus
+    /// anything else, which left FocusedHandle stuck on an invisible window. Prefers the tag's
+    /// last-focused window (dwm's per-tag "sel") over top-of-stack. With nothing left, focus goes
+    /// to the desktop so keystrokes stop reaching the hidden window.</summary>
+    private void FocusSomethingOnCurrentMonitor()
+    {
+        List<ManagedWindow> visible = VisibleWindowsOnCurrentMonitor();
+        HWND remembered = CurrentTag.LastFocusedHandle;
+        ManagedWindow? target = visible.Find(w => w.Handle == remembered) ?? (visible.Count > 0 ? visible[0] : null);
+        if (target is not null)
+        {
+            WindowInspector.ForceSetForegroundWindow(target.Handle);
+            return;
+        }
+
+        // Clear up front; the desktop's foreground event may never arrive.
+        FocusedHandle = HWND.Null;
+        FocusedTitle = "";
+        HWND desktop = PInvoke.GetShellWindow();
+        if (!desktop.IsNull)
+            WindowInspector.ForceSetForegroundWindow(desktop);
+        Changed?.Invoke();
+    }
+
     /// <summary>True if this window is currently supposed to be visible on this specific monitor:
     /// on its active tag, pinned (bug.n's "pin" -- visible/tiled on every tag regardless of its
     /// own TagIndex, but not across monitors), or every tag is while
@@ -888,18 +927,10 @@ internal sealed unsafe class WindowManager
         // dwm's view(): landing on a tag focuses something there rather than leaving Windows to
         // pick whatever it wants once the old focus target gets hidden -- unless the
         // previously-focused window is still visible here (e.g. it's pinned), in which case it
-        // keeps focus untouched. Prefers the tag's own last-focused window (see
-        // OnForegroundChanged) over top-of-stack, so switching away and back doesn't lose which
-        // window you actually had selected there -- same as dwm's per-tag "sel".
+        // keeps focus untouched.
         bool previousStillVisible = previouslyFocused is not null && IsVisibleOn(previouslyFocused, monitor, monitorIndex);
         if (!previousStillVisible)
-        {
-            List<ManagedWindow> visible = VisibleWindowsOnCurrentMonitor();
-            HWND remembered = monitor.Tags[tagIndex].LastFocusedHandle;
-            ManagedWindow? target = visible.Find(w => w.Handle == remembered) ?? (visible.Count > 0 ? visible[0] : null);
-            if (target is not null)
-                WindowInspector.ForceSetForegroundWindow(target.Handle);
-        }
+            FocusSomethingOnCurrentMonitor();
 
         Changed?.Invoke();
     }
