@@ -20,10 +20,21 @@ internal static class StartupRegistration
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "Wtile";
 
+    /// <summary>Reads as "off" if the registry can't be read for any reason -- a startup
+    /// convenience must never take the window manager down over a tray click, same policy as
+    /// SpawnCommand around Process.Start.</summary>
     public static bool IsEnabled()
     {
-        using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKeyPath);
-        return key?.GetValue(ValueName) is string;
+        try
+        {
+            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKeyPath);
+            return key?.GetValue(ValueName) is string;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[launch-on-boot] Failed to read the Run key: {ex.Message}");
+            return false;
+        }
     }
 
     /// <summary>general.launchOnBoot: omitted (null) leaves the Run entry alone, making the tray
