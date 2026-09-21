@@ -70,7 +70,7 @@ internal static class StartupRegistration
                 Console.WriteLine("[launch-on-boot] Unregistered.");
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        catch (Exception ex)
         {
             Console.WriteLine($"[launch-on-boot] Failed to update the Run key: {ex.Message}");
         }
