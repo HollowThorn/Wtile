@@ -2,7 +2,8 @@
 # Not watched live -- after editing and saving, press the "reload" hotkey (Win+Shift+R by
 # default, see --- session --- below) to apply. That hotkey also unconditionally refreshes the
 # bar's screen geometry, so it doubles as the fix for a stale bar/layout after connecting or
-# disconnecting a monitor.
+# disconnecting a monitor, or after resuming from sleep (Windows' monitor handles go stale across
+# a sleep/wake cycle, same as a real hotplug).
 
 general:
   tagCount: 9

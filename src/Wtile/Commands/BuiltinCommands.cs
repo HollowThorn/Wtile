@@ -292,6 +292,9 @@ internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IR
         foreach (string warning in result.Warnings)
             Console.WriteLine($"[config] warning: {warning}");
         applier.Apply(result.Config);
+        // Before the bars re-measure themselves: re-binds monitor handles, so a reload also
+        // recovers from a display change Wtile somehow missed (see WindowManager.RefreshMonitors).
+        manager.RefreshMonitors();
         foreach (BarWindow bar in bars)
             bar.RefreshGeometry();
 

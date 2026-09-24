@@ -1,7 +1,14 @@
 namespace Wtile.Layouts;
 
 /// <summary>A window rectangle in physical screen pixels, relative to the virtual desktop origin.</summary>
-public readonly record struct LayoutRect(int X, int Y, int Width, int Height);
+public readonly record struct LayoutRect(int X, int Y, int Width, int Height)
+{
+    /// <summary>Degenerate: nothing can be laid out in it. Notably what WindowInspector returns
+    /// for a monitor handle GetMonitorInfo rejects (a stale HMONITOR after the display config
+    /// changed), so callers use it to tell "no usable geometry" from a real rect instead of
+    /// tiling everything into a 0x0 box at the screen origin.</summary>
+    public bool IsEmpty => Width <= 0 || Height <= 0;
+}
 
 /// <summary>
 /// Inputs to a layout's arrangement pass. Deliberately holds counts/params rather than
