@@ -29,6 +29,7 @@ internal sealed unsafe class WindowManager
     private IReadOnlyList<CompiledTagRule> _tagRules = [];
     private bool _rulesNeedProcessName; // resolving one costs a syscall; skipped unless some rule reads it
     private List<Monitor> _monitors = [];
+    private int _lastReportedMonitorCount = -1; // see RefreshMonitors: keeps its log to once per change
     private bool _suppressMonitorFollow; // see OnWindowDestroyed/OnForegroundChanged
 
     /// <summary>Only non-null while Seed() is enumerating, and only when a state.json was loaded:
@@ -47,9 +48,10 @@ internal sealed unsafe class WindowManager
 
     /// <summary>
     /// Enumerates connected monitors and builds independent tag state for each, seeded from the
-    /// same shared config. Call once at startup, before Seed(). Re-enumerating later isn't
-    /// supported yet -- a monitor count change (true hotplug) needs a restart; "reload" only
-    /// refreshes geometry for monitors already known.
+    /// same shared config. Call once at startup, before Seed(). Later display changes re-bind
+    /// these same monitors to fresh handles in place (see <see cref="RefreshMonitors"/>); the
+    /// list itself is never resized, so a monitor count change (true hotplug) still needs a
+    /// restart to be managed.
     /// </summary>
     public void InitializeMonitors()
     {
@@ -61,6 +63,62 @@ internal sealed unsafe class WindowManager
 
         int primaryIndex = _monitors.FindIndex(m => m.IsPrimary);
         CurrentMonitorIndex = Math.Max(0, primaryIndex);
+    }
+
+    /// <summary>
+    /// Re-binds every known monitor to a freshly enumerated HMONITOR, keeping all of its
+    /// tag/layout state, then re-arranges. An HMONITOR is only valid until the display
+    /// configuration changes: resuming from sleep (also a resolution change, or a monitor
+    /// un/replugged) destroys the monitor objects the handles from InitializeMonitors point at,
+    /// after which GetMonitorInfo fails on every one of them and tiling has no geometry to work
+    /// with -- that was the "all my windows are stuck in the top-left corner until I restart
+    /// Wtile" bug: nothing ever re-enumerated, so a restart was the only way to get fresh
+    /// handles. Called from the "reload" command, same as it already recovers a stale bar/layout
+    /// after connecting or disconnecting a monitor -- a sleep/wake cycle is handled the same way,
+    /// press reload rather than restarting.
+    ///
+    /// Monitors are matched by EnumDisplayMonitors order, the same order they were first
+    /// enumerated and bars were created in. The monitor list itself is never resized here:
+    /// bars, window MonitorIndexes and monitor-targeting commands are all indexed by position,
+    /// so a true hotplug still needs a restart (see InitializeMonitors). A monitor that is gone
+    /// just gets a null handle -- its windows keep their positions untouched until it is back.
+    /// </summary>
+    public void RefreshMonitors()
+    {
+        List<WindowInspector.MonitorInfo> infos = WindowInspector.EnumerateMonitors();
+        if (infos.Count == 0)
+            return; // nothing enumerated (e.g. mid display-mode transition) -- next reload retries
+
+        int shared = Math.Min(infos.Count, _monitors.Count);
+        for (int i = 0; i < shared; i++)
+        {
+            _monitors[i].Handle = infos[i].Handle;
+            _monitors[i].IsPrimary = infos[i].IsPrimary;
+        }
+
+        // Fewer monitors than we manage: null out the missing ones so ArrangeMonitor skips them
+        // (their windows stay put, untouched, rather than being tiled into nothing) and so
+        // ResolveMonitorIndex can't match a stale handle. They come back on the next refresh.
+        for (int i = shared; i < _monitors.Count; i++)
+        {
+            _monitors[i].Handle = HMONITOR.Null;
+            _monitors[i].IsPrimary = false;
+        }
+
+        // Logged once per change, not once per refresh: a resume can fire several refreshes.
+        if (infos.Count != _monitors.Count && infos.Count != _lastReportedMonitorCount)
+        {
+            Console.WriteLine($"[monitors] {infos.Count} monitor(s) connected, Wtile is managing {_monitors.Count} "
+                + (infos.Count < _monitors.Count
+                    ? "-- windows on the disconnected monitor(s) are left in place until it's back; restart Wtile to reclaim them now."
+                    : "-- restart Wtile to manage the new monitor(s)."));
+        }
+        _lastReportedMonitorCount = infos.Count;
+
+        if (_monitors[CurrentMonitorIndex].Handle.IsNull)
+            CurrentMonitorIndex = Math.Max(0, _monitors.FindIndex(m => !m.Handle.IsNull));
+
+        Arrange(); // picks up real geometry now if it's available; ArrangeMonitor logs + no-ops per monitor otherwise
     }
 
     private static Tag[] BuildTags(int count, string layoutName, IReadOnlyDictionary<string, double> layoutParams)
@@ -1233,11 +1291,32 @@ internal sealed unsafe class WindowManager
         LayoutRect workArea = IsTaskbarHidden
             ? WindowInspector.GetMonitorBounds(monitor.Handle)
             : WindowInspector.GetMonitorWorkArea(monitor.Handle);
+
+        // A monitor whose handle no longer resolves reports an empty rect -- which is what every
+        // HMONITOR does after the display configuration changed under us (waking from sleep is
+        // the common one: the old monitor objects are torn down and GetMonitorInfo starts failing
+        // on the handles enumerated at startup). Tiling into that rect would pack every window on
+        // this monitor into a 0x0 box at the virtual-desktop origin -- the top-left corner -- and
+        // every later arrange would put them right back there. Leave them exactly where they are
+        // instead; RefreshMonitors re-binds the handle and re-arranges once the display is back.
+        if (workArea.IsEmpty)
+        {
+            if (!monitor.ReportedNoGeometry)
+            {
+                monitor.ReportedNoGeometry = true;
+                Console.WriteLine($"[arrange] Monitor {monitorIndex + 1} reports no usable geometry (display asleep or reconfigured); press reload once the display is back to recover.");
+            }
+            return;
+        }
+        monitor.ReportedNoGeometry = false;
+
         workArea = workArea with
         {
             Y = workArea.Y + monitor.ReservedTopInset,
             Height = workArea.Height - monitor.ReservedTopInset - monitor.ReservedBottomInset,
         };
+        if (workArea.IsEmpty)
+            return; // bar insets swallowed the entire work area; nothing sane to lay out
         IReadOnlyList<LayoutRect> rects = layout.Arrange(new LayoutContext(workArea, tiled.Count, activeTag.LayoutParams));
 
         bool anyFailed = false;

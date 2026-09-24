@@ -125,6 +125,9 @@ internal sealed unsafe class BarWindow : IDisposable
     private void RepositionAndResize()
     {
         LayoutRect bounds = WindowInspector.GetMonitorBounds(_monitor.Handle);
+        if (bounds.IsEmpty)
+            return; // monitor asleep or its handle gone stale -- resizing the bar to 0x0 would just lose it
+
         int y = _isBottom ? bounds.Y + bounds.Height - _height : bounds.Y;
         PInvoke.SetWindowPos(
             _hwnd, HWND.Null, bounds.X, y, bounds.Width, _height,

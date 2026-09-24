@@ -52,6 +52,8 @@ public class WindowFilterTests
     [InlineData("tooltips_class32")]
     [InlineData("NativeHWNDHost")]
     [InlineData("#32770")]
+    [InlineData("Xaml_WindowedPopupClass")]
+    [InlineData("OperationStatusWindow")]
     public void KnownShellClasses_AreNotManageable(string className)
     {
         var w = NormalApp(className);
