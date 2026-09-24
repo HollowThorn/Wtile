@@ -47,6 +47,19 @@ public static class WindowFilter
                   // (e.g. the Run dialog) deliberately set WS_EX_APPWINDOW despite having an owner
                   // just to force their own taskbar button, which otherwise opts them back into
                   // tiling. bug.n never tiles these either (they're WS_POPUP by construction).
+        "Xaml_WindowedPopupClass", // modern shell flyout host (Start menu's power/account
+                                   // submenus, the redesigned right-click context menu, volume/
+                                   // network quick-settings, ...) -- unlike the CoreWindow the
+                                   // Start menu itself uses (already excluded above), these open
+                                   // as their own separate top-level popup with no owner set, so
+                                   // without this they slip through as a real "second window" and
+                                   // the whole tag gets re-tiled around a popup that isn't really
+                                   // there -- visibly a phantom blank slot until it closes.
+        "OperationStatusWindow", // Explorer's copy/move/delete progress dialog. Like a tray-icon
+                                 // app, Explorer hides rather than destroys it when the operation
+                                 // finishes (reused for the next one), which used to leave it
+                                 // stuck occupying a layout slot forever (see OnWindowHidden) --
+                                 // simplest fix is to never manage it in the first place.
     };
 
     public static bool IsManageable(in WindowSnapshot window)
