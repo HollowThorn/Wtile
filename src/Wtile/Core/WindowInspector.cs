@@ -204,6 +204,15 @@ internal static unsafe class WindowInspector
         PInvoke.SetForegroundWindow(target);
         PInvoke.BringWindowToTop(target);
 
+        // SetForegroundWindow only activates `target` (topmost, highlighted titlebar) -- actual
+        // keyboard focus is tracked separately, per-thread, and isn't guaranteed to follow.
+        // Observed live with WezTerm: it becomes foreground but silently keeps routing keystrokes
+        // to whatever previously had focus until something else (e.g. a tag switch away and back)
+        // happens to re-trigger this whole dance and it sticks. SetFocus is only reliable
+        // cross-thread while AttachThreadInput has linked the input queues, hence doing it here
+        // rather than leaving it to whatever SetForegroundWindow implicitly does.
+        PInvoke.SetFocus(target);
+
         if (attachedTarget)
             PInvoke.AttachThreadInput(currentThreadId, targetThreadId, false);
         if (attachedForeground)
