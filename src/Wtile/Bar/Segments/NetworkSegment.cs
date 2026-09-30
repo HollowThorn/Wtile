@@ -9,10 +9,10 @@ internal sealed class NetworkSegment(BarTheme theme, string? format) : ISegment
     private const string DefaultFormat = "↓{0} ↑{1}";
 
     // Widest rate string ByteRateFormatter is realistically expected to produce for reservation
-    // purposes -- "999.9M" covers throughput up to ~1GB/s (≈8Gbps), well beyond typical home/
+    // purposes -- "999.9MB/s" covers throughput up to ~1GB/s (≈8Gbps), well beyond typical home/
     // office links. Sustained rates above that (rare) would still jitter the segment width; not
     // worth reserving for since it'd waste bar space on every normal reading.
-    private const string WidestRate = "999.9M";
+    private const string WidestRate = "999.9MB/s";
 
     private static string ComposeText(string? format, string down, string up) =>
         SegmentFormat.Apply(format ?? DefaultFormat, DefaultFormat, down, up);

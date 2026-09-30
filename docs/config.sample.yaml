@@ -138,7 +138,7 @@ bar:
     - name: battery
       format: "BAT {0}% {1}"    # {0} = percent, {1} = "Charging" | "AC" | ""
     - name: network
-      format: "↓{0} ↑{1}"       # {0}/{1} = human rate strings, e.g. "1.2M"
+      format: "↓{0} ↑{1}"       # {0}/{1} = human rate strings, e.g. "1.2MB/s"
     - name: volume
       format: "VOL {0}%"        # {0} = integer percent 0-100; when muted, shows bare "MUTED" instead of this whole format
 
