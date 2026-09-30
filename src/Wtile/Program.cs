@@ -55,6 +55,20 @@ if (launchedFromTerminal && !debug)
     return;
 }
 
+// Nothing stops a second `wtile` launching alongside a first, and two would each install their
+// own keyboard hook, tray icon, and bars, and fight over the same windows. A named mutex
+// (unprefixed, so it lives in this session's own namespace -- each interactive user session gets
+// its own, same as the tray icon/hotkeys already implicitly do) is the standard single-instance
+// idiom: held for the whole process lifetime via the `using` below, so it's released
+// automatically on exit, clean or not, rather than needing its own cleanup path alongside
+// CleanUpForExit.
+using var singleInstanceMutex = new Mutex(initiallyOwned: true, "Wtile-SingleInstance", out bool isFirstInstance);
+if (!isFirstInstance)
+{
+    Console.WriteLine("Wtile is already running.");
+    return;
+}
+
 Console.WriteLine("Wtile starting...");
 
 // COM must be initialized on this thread before any IMMDeviceEnumerator/IAudioEndpointVolume use
