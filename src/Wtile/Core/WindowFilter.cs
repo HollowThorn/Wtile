@@ -12,7 +12,8 @@ public readonly record struct WindowSnapshot(
     bool HasOwner,
     bool IsToolWindow,
     bool IsAppWindow,
-    bool IsCloaked);
+    bool IsCloaked,
+    bool HasSizeBorder);
 
 /// <summary>
 /// Decides whether a window should be tiled. This is the highest-risk, most-iterated piece of
@@ -32,9 +33,6 @@ public static class WindowFilter
                          // (e.g. a VM resizing the guest's resolution), briefly appearing as a
                          // plain untitled top-level window before Explorer re-parents/cloaks it
         "Windows.UI.Core.CoreWindow",
-        "ApplicationFrameWindow", // UWP app host (Settings, Calculator, Photos, Mail, Maps, ...) --
-                                  // bug.n leaves these untiled by default too; the host resizes its
-                                  // inner CoreWindow on its own schedule, fighting external WinAPI resizes
         "MultitaskingViewFrame",
         "XamlExplorerHostIslandWindow",
         "ApplicationManager_DesktopShellWindow",
@@ -68,6 +66,14 @@ public static class WindowFilter
             return false;
 
         if (ExcludedClassNames.Contains(window.ClassName))
+            return false;
+
+        // ApplicationFrameWindow is the shared UWP app host (Settings, Calculator, Photos, Mail,
+        // Maps, ...); its inner CoreWindow can resize itself on its own schedule, fighting
+        // external WinAPI resizes. That fight is only a real risk for the fixed-size flyouts and
+        // mini-apps that use this same host without a resize border -- a genuinely resizable one
+        // (Settings, Calculator, ...) behaves like any other WS_THICKFRAME window.
+        if (window.ClassName.Equals("ApplicationFrameWindow", StringComparison.OrdinalIgnoreCase) && !window.HasSizeBorder)
             return false;
 
         // A window with an owner (e.g. a dialog) or the WS_EX_TOOLWINDOW style is normally
