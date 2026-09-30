@@ -81,6 +81,7 @@ WM_RBUTTONUP
 WM_COMMAND
 AttachConsole
 ATTACH_PARENT_PROCESS
+FreeConsole
 SetForegroundWindow
 SetWindowsHookEx
 UnhookWindowsHookEx
