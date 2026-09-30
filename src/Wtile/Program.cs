@@ -6,6 +6,7 @@
 // bar geometry against current screen metrics, independent of whether the file changed).
 // Per-tag layout state (nmaster/mfact/gap) is independent per tag, like dwm/bug.n.
 
+using System.Diagnostics;
 using System.Reflection;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -22,9 +23,10 @@ using Wtile.Layouts;
 // Wtile is a Windows-subsystem exe (see OutputType in Wtile.csproj) so launching it from Explorer,
 // a shortcut, or Startup never flashes a console -- but that also means Console.WriteLine below
 // silently goes nowhere by default. Attaching to an already-running parent console (i.e. we were
-// launched from a terminal, as with `-v` below) restores that output there without ever creating
-// a console of our own.
-PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
+// launched from a terminal) restores that output there without ever creating a console of our
+// own -- gated below on -d/--debug so a plain terminal launch stays quiet.
+bool launchedFromTerminal = PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
+bool debug = args.Contains("-d") || args.Contains("--debug");
 
 // Checked before anything else (no hooks/COM/windows touched yet) so `-v`/`--version` is a cheap,
 // side-effect-free way to prove which build an exe at some install path actually is -- see
@@ -32,6 +34,38 @@ PInvoke.AttachConsole(PInvoke.ATTACH_PARENT_PROCESS);
 if (args is ["-v" or "--version"])
 {
     Console.WriteLine($"Wtile {Wtile.BuildInfo.GitCommit} (built {Wtile.BuildInfo.BuildTimeUtc} UTC)");
+    return;
+}
+
+// PowerShell (unlike cmd.exe, which checks the PE subsystem and doesn't wait for GUI-subsystem
+// exes) blocks the prompt until a directly-invoked process exits -- so `wtile` from a terminal
+// would otherwise hold that terminal hostage for as long as Wtile keeps running, since Wtile never
+// opens a window of its own to Alt-F4 away from. Sidestep it the way any Windows background tool
+// does: relaunch as a fresh, independent process the shell was never waiting on, and let this
+// short-lived one exit immediately. Only relevant when actually launched from a terminal
+// (launchedFromTerminal -- Explorer/shortcut/Startup never blocks anything) and only when the
+// user hasn't asked to watch it live with -d/--debug, which implies staying attached is fine.
+if (launchedFromTerminal && !debug)
+{
+    PInvoke.FreeConsole();
+    var relaunch = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true };
+    foreach (string a in args)
+        relaunch.ArgumentList.Add(a);
+    Process.Start(relaunch);
+    return;
+}
+
+// Nothing stops a second `wtile` launching alongside a first, and two would each install their
+// own keyboard hook, tray icon, and bars, and fight over the same windows. A named mutex
+// (unprefixed, so it lives in this session's own namespace -- each interactive user session gets
+// its own, same as the tray icon/hotkeys already implicitly do) is the standard single-instance
+// idiom: held for the whole process lifetime via the `using` below, so it's released
+// automatically on exit, clean or not, rather than needing its own cleanup path alongside
+// CleanUpForExit.
+using var singleInstanceMutex = new Mutex(initiallyOwned: true, "Wtile-SingleInstance", out bool isFirstInstance);
+if (!isFirstInstance)
+{
+    Console.WriteLine("Wtile is already running.");
     return;
 }
 

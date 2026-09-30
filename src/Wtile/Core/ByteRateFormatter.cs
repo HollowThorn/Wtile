@@ -1,7 +1,8 @@
 namespace Wtile.Core;
 
-/// <summary>Formats a bytes/sec rate as a short human string (1024-based), e.g. "512B", "1.2M".
-/// slstatus-flavored brevity -- one-letter unit, no "iB".</summary>
+/// <summary>Formats a bytes/sec rate as a short human string (1024-based), e.g. "512B/s", "1.2MB/s"
+/// -- spelled out as bytes, not just a bare one-letter unit, so it can't read as megabits/sec at
+/// a glance.</summary>
 public static class ByteRateFormatter
 {
     private const double Kilo = 1024;
@@ -12,11 +13,11 @@ public static class ByteRateFormatter
     {
         double b = Math.Max(0, bytesPerSecond);
         if (b < Kilo)
-            return $"{(int)b}B";
+            return $"{(int)b}B/s";
         if (b < Mega)
-            return $"{b / Kilo:0.0}K";
+            return $"{b / Kilo:0.0}KB/s";
         if (b < Giga)
-            return $"{b / Mega:0.0}M";
-        return $"{b / Giga:0.0}G";
+            return $"{b / Mega:0.0}MB/s";
+        return $"{b / Giga:0.0}GB/s";
     }
 }

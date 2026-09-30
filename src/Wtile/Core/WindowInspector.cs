@@ -23,6 +23,9 @@ internal static unsafe class WindowInspector
         bool isToolWindow = (exStyle & (int)WINDOW_EX_STYLE.WS_EX_TOOLWINDOW) != 0;
         bool isAppWindow = (exStyle & (int)WINDOW_EX_STYLE.WS_EX_APPWINDOW) != 0;
 
+        int style = PInvoke.GetWindowLong(hwnd, WINDOW_LONG_PTR_INDEX.GWL_STYLE);
+        bool hasSizeBorder = (style & (int)WINDOW_STYLE.WS_THICKFRAME) != 0;
+
         return new WindowSnapshot(
             Title: GetWindowText(hwnd),
             ClassName: GetClassName(hwnd),
@@ -31,7 +34,8 @@ internal static unsafe class WindowInspector
             HasOwner: hasOwner,
             IsToolWindow: isToolWindow,
             IsAppWindow: isAppWindow,
-            IsCloaked: IsCloaked(hwnd));
+            IsCloaked: IsCloaked(hwnd),
+            HasSizeBorder: hasSizeBorder);
     }
 
     /// <summary>True if DWM is currently cloaking this window -- e.g. it's on another virtual
@@ -203,6 +207,15 @@ internal static unsafe class WindowInspector
 
         PInvoke.SetForegroundWindow(target);
         PInvoke.BringWindowToTop(target);
+
+        // SetForegroundWindow only activates `target` (topmost, highlighted titlebar) -- actual
+        // keyboard focus is tracked separately, per-thread, and isn't guaranteed to follow.
+        // Observed live with WezTerm: it becomes foreground but silently keeps routing keystrokes
+        // to whatever previously had focus until something else (e.g. a tag switch away and back)
+        // happens to re-trigger this whole dance and it sticks. SetFocus is only reliable
+        // cross-thread while AttachThreadInput has linked the input queues, hence doing it here
+        // rather than leaving it to whatever SetForegroundWindow implicitly does.
+        PInvoke.SetFocus(target);
 
         if (attachedTarget)
             PInvoke.AttachThreadInput(currentThreadId, targetThreadId, false);

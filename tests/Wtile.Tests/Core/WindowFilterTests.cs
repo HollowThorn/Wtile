@@ -12,7 +12,8 @@ public class WindowFilterTests
         HasOwner: false,
         IsToolWindow: false,
         IsAppWindow: false,
-        IsCloaked: false);
+        IsCloaked: false,
+        HasSizeBorder: true);
 
     [Fact]
     public void NormalTopLevelWindow_IsManageable()
@@ -48,7 +49,6 @@ public class WindowFilterTests
     [InlineData("WorkerW")]
     [InlineData("Worker Window")]
     [InlineData("Windows.UI.Core.CoreWindow")]
-    [InlineData("ApplicationFrameWindow")]
     [InlineData("tooltips_class32")]
     [InlineData("NativeHWNDHost")]
     [InlineData("#32770")]
@@ -57,6 +57,23 @@ public class WindowFilterTests
     public void KnownShellClasses_AreNotManageable(string className)
     {
         var w = NormalApp(className);
+        Assert.False(WindowFilter.IsManageable(w));
+    }
+
+    [Fact]
+    public void ResizableApplicationFrameWindow_IsManageable()
+    {
+        // e.g. Settings, Calculator, Photos -- share the UWP host class but behave like any
+        // other resizable top-level window.
+        var w = NormalApp("ApplicationFrameWindow") with { HasSizeBorder = true };
+        Assert.True(WindowFilter.IsManageable(w));
+    }
+
+    [Fact]
+    public void FixedSizeApplicationFrameWindow_IsNotManageable()
+    {
+        // e.g. a fixed-size UWP flyout/mini-app hosted by the same class, with no resize border.
+        var w = NormalApp("ApplicationFrameWindow") with { HasSizeBorder = false };
         Assert.False(WindowFilter.IsManageable(w));
     }
 
