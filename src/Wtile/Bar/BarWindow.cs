@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.UI.Shell;
 using Windows.Win32.UI.WindowsAndMessaging;
 using Wtile.Bar.Segments;
 using Wtile.Commands;
@@ -26,6 +27,11 @@ internal sealed unsafe class BarWindow : IDisposable
 {
     private const string ClassName = "WtileBarWindow";
     private const int TimerIdClock = 1;
+
+    // WM_APP (0x8000) + 3: HotkeyManager's message-only window uses +2 on its own HWND, so this
+    // doesn't need to avoid it, but keeping every WM_APP_* offset in the codebase distinct makes
+    // grepping for one unambiguous.
+    private const uint WM_APPBAR_CALLBACK = 0x8000 + 3;
 
     private static readonly Dictionary<nint, BarWindow> Instances = [];
     private static bool _classRegistered;
@@ -74,6 +80,7 @@ internal sealed unsafe class BarWindow : IDisposable
         Instances[(nint)_hwnd.Value] = this;
         manager.IgnoredFocusHandles.Add(_hwnd);
 
+        RegisterAppBar();
         RebuildSegments(config);
         ApplyReservedInset();
 
@@ -140,6 +147,50 @@ internal sealed unsafe class BarWindow : IDisposable
         _monitor.ReservedTopInset = _isBottom ? 0 : reserved;
         _monitor.ReservedBottomInset = _isBottom ? reserved : 0;
         _manager.Arrange();
+        UpdateAppBarReservation(reserved);
+    }
+
+    /// <summary>
+    /// Registering as a Shell AppBar (the same mechanism the real taskbar uses) makes Windows
+    /// shrink every monitor's reported work area (GetMonitorInfo's rcWork) to exclude the bar --
+    /// without this, the work area stays the full monitor bounds as far as any other app is
+    /// concerned, since Wtile's bar is otherwise just an ordinary topmost popup window that
+    /// happens to sit there. Observed live: a window that lays itself out against the work area
+    /// on its own (rather than only reacting to what Wtile arranges it into) -- e.g. on session
+    /// restore, or again later on some internal re-layout unrelated to any WinEvent Wtile hears
+    /// about -- snaps back to y=0 under the bar, leaving a gap at the opposite edge the same size
+    /// as the bar. A one-shot ScheduleRearrange-style follow-up can't chase that down; it isn't
+    /// tied to any event this process sees. Registering properly fixes it at the source for every
+    /// app, not just the one that happened to trigger a rearrange.
+    /// </summary>
+    private void RegisterAppBar()
+    {
+        var abd = new APPBARDATA { cbSize = (uint)sizeof(APPBARDATA), hWnd = _hwnd, uCallbackMessage = WM_APPBAR_CALLBACK };
+        PInvoke.SHAppBarMessage(PInvoke.ABM_NEW, &abd);
+    }
+
+    private void UpdateAppBarReservation(int reserved)
+    {
+        LayoutRect bounds = WindowInspector.GetMonitorBounds(_monitor.Handle);
+        if (bounds.IsEmpty)
+            return; // monitor asleep or its handle gone stale -- same guard as RepositionAndResize
+
+        var abd = new APPBARDATA
+        {
+            cbSize = (uint)sizeof(APPBARDATA),
+            hWnd = _hwnd,
+            uEdge = (uint)(_isBottom ? PInvoke.ABE_BOTTOM : PInvoke.ABE_TOP),
+            rc = _isBottom
+                ? new RECT { left = bounds.X, top = bounds.Y + bounds.Height - reserved, right = bounds.X + bounds.Width, bottom = bounds.Y + bounds.Height }
+                : new RECT { left = bounds.X, top = bounds.Y, right = bounds.X + bounds.Width, bottom = bounds.Y + reserved },
+        };
+        PInvoke.SHAppBarMessage(PInvoke.ABM_SETPOS, &abd);
+    }
+
+    private void UnregisterAppBar()
+    {
+        var abd = new APPBARDATA { cbSize = (uint)sizeof(APPBARDATA), hWnd = _hwnd };
+        PInvoke.SHAppBarMessage(PInvoke.ABM_REMOVE, &abd);
     }
 
     /// <summary>Shows/hides this bar and reclaims/releases the space it reserves for tiling --
@@ -278,6 +329,7 @@ internal sealed unsafe class BarWindow : IDisposable
     public void Dispose()
     {
         PInvoke.KillTimer(_hwnd, TimerIdClock);
+        UnregisterAppBar();
         Instances.Remove((nint)_hwnd.Value);
         PInvoke.DestroyWindow(_hwnd);
         _font.Dispose();
