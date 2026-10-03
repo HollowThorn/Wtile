@@ -275,10 +275,10 @@ internal sealed class InspectWindowCommand : ICommand
 /// segments), then unconditionally refreshes the bar's screen geometry and re-arranges --
 /// covers both "I edited the config" and "I connected/disconnected a monitor" with one hotkey,
 /// in place of a background file watcher for an event this rare. Registered separately in
-/// Program.cs (not CreateDefault below) since it needs the BarWindow/ConfigApplier, which are
-/// constructed after the initial CommandRegistry.
+/// Program.cs (not CreateDefault below) since it needs the ConfigApplier and the bars' display
+/// refresh, which are constructed after the initial CommandRegistry.
 /// </summary>
-internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IReadOnlyList<BarWindow> bars, WindowManager manager, string statePath) : ICommand
+internal sealed class ReloadCommand(string configPath, ConfigApplier applier, WindowManager manager, string statePath, Func<bool> refreshDisplays) : ICommand
 {
     public string Name => "reload";
 
@@ -292,11 +292,7 @@ internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IR
         foreach (string warning in result.Warnings)
             Console.WriteLine($"[config] warning: {warning}");
         applier.Apply(result.Config);
-        // Before the bars re-measure themselves: re-binds monitor handles, so a reload also
-        // recovers from a display change Wtile somehow missed (see WindowManager.RefreshMonitors).
-        manager.RefreshMonitors();
-        foreach (BarWindow bar in bars)
-            bar.RefreshGeometry();
+        refreshDisplays(); // also recovers from a display change DisplayChangeWatcher somehow missed
 
         if (manager.RememberState && WindowStateStore.TryLoad(statePath, out SavedState state))
             manager.ApplySavedState(state);

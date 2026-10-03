@@ -119,8 +119,8 @@ internal sealed unsafe class BarWindow : IDisposable
     /// Unconditionally re-reads the primary monitor's current dimensions and repositions/resizes
     /// the bar + re-arranges windows to match -- fixes a stale bar size/window layout after a
     /// monitor/resolution change, independent of whether the config file itself changed. Called
-    /// from the "reload" command (Win+Shift+R by default) rather than automatically, since that's
-    /// a rare enough event not to warrant a background watcher for it either.
+    /// automatically on display changes and resume from sleep (see DisplayChangeWatcher), and by
+    /// the "reload" command.
     /// </summary>
     public void RefreshGeometry()
     {

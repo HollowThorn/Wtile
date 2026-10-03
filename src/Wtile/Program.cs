@@ -117,6 +117,17 @@ for (int i = 0; i < manager.Monitors.Count; i++)
     bars.Add(new BarWindow(manager, commands, initial.Config.Bar, manager.Monitors[i], i));
 commands.Register(new ToggleBarCommand(bars));
 
+// Shared by reload and DisplayChangeWatcher; returns whether every connected display reported
+// usable geometry.
+Func<bool> refreshDisplays = () =>
+{
+    manager.RefreshMonitors();
+    foreach (BarWindow bar in bars)
+        bar.RefreshGeometry();
+    return manager.Monitors.All(m => m.Handle.IsNull || !WindowInspector.GetMonitorWorkArea(m.Handle).IsEmpty);
+};
+using var displayWatcher = new DisplayChangeWatcher(refreshDisplays);
+
 using var focusBorder = new FocusBorderWindow(manager, initial.Config.General.FocusedBorderWidth, initial.Config.General.FocusedBorderColor);
 
 using var hotkeys = new HotkeyManager(commands);
@@ -126,7 +137,7 @@ using var launcher = new LauncherWindow(manager, initial.Config.Bar);
 commands.Register(new AppLauncherCommand(launcher));
 
 var applier = new ConfigApplier(manager, bars, hotkeys, focusBorder, launcher);
-commands.Register(new ReloadCommand(configPath, applier, bars, manager, statePath));
+commands.Register(new ReloadCommand(configPath, applier, manager, statePath, refreshDisplays));
 
 using var tray = new TrayIcon(commands);
 

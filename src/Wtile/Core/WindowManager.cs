@@ -74,9 +74,8 @@ internal sealed unsafe class WindowManager
     /// after which GetMonitorInfo fails on every one of them and tiling has no geometry to work
     /// with -- that was the "all my windows are stuck in the top-left corner until I restart
     /// Wtile" bug: nothing ever re-enumerated, so a restart was the only way to get fresh
-    /// handles. Called from the "reload" command, same as it already recovers a stale bar/layout
-    /// after connecting or disconnecting a monitor -- a sleep/wake cycle is handled the same way,
-    /// press reload rather than restarting.
+    /// handles. Called automatically by DisplayChangeWatcher on display changes and on resume
+    /// from sleep, and from the "reload" command as a manual fallback.
     ///
     /// Monitors are matched by EnumDisplayMonitors order, the same order they were first
     /// enumerated and bars were created in. The monitor list itself is never resized here:
@@ -1354,7 +1353,7 @@ internal sealed unsafe class WindowManager
             if (!monitor.ReportedNoGeometry)
             {
                 monitor.ReportedNoGeometry = true;
-                Console.WriteLine($"[arrange] Monitor {monitorIndex + 1} reports no usable geometry (display asleep or reconfigured); press reload once the display is back to recover.");
+                Console.WriteLine($"[arrange] Monitor {monitorIndex + 1} reports no usable geometry (display asleep or reconfigured); it recovers automatically once the display is back.");
             }
             return;
         }
