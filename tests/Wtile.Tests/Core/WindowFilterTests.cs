@@ -54,6 +54,12 @@ public class WindowFilterTests
     [InlineData("#32770")]
     [InlineData("Xaml_WindowedPopupClass")]
     [InlineData("OperationStatusWindow")]
+    [InlineData("Shell_LightDismissOverlay")]
+    [InlineData("Shell_SystemDim")]
+    [InlineData("Shell_SystemDialog")]
+    [InlineData("Shell_SystemDialogProxy")]
+    [InlineData("LockScreenBackstopFrame")]
+    [InlineData("LockScreenInputOcclusionFrame")]
     public void KnownShellClasses_AreNotManageable(string className)
     {
         var w = NormalApp(className);

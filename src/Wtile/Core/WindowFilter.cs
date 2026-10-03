@@ -58,6 +58,12 @@ public static class WindowFilter
                                  // finishes (reused for the next one), which used to leave it
                                  // stuck occupying a layout slot forever (see OnWindowHidden) --
                                  // simplest fix is to never manage it in the first place.
+        "Shell_LightDismissOverlay", // invisible full-screen click catcher behind shell flyouts (Win+V, ...)
+        "Shell_SystemDim", // dimmed backdrop behind secure system prompts
+        "Shell_SystemDialog", // the secure credential/sign-in prompt itself
+        "Shell_SystemDialogProxy", // its companion host window
+        "LockScreenBackstopFrame", // lock-screen surfaces: briefly mapped as ordinary top-level
+        "LockScreenInputOcclusionFrame", // windows around locking/unlocking the session
     };
 
     public static bool IsManageable(in WindowSnapshot window)
