@@ -128,7 +128,7 @@ commands.Register(new AppLauncherCommand(launcher));
 var applier = new ConfigApplier(manager, bars, hotkeys, focusBorder, launcher);
 commands.Register(new ReloadCommand(configPath, applier, bars, manager, statePath));
 
-using var tray = new TrayIcon(commands);
+using var tray = new TrayIcon(commands, manager);
 
 // Crash-safety net: keeps state.json fresh (debounced) during activity, not just at quit/reload,
 // so TryRecoverHidden has something recent to work with after an unclean exit -- see
