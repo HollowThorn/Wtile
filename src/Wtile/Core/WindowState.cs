@@ -45,6 +45,8 @@ public sealed class SavedWindowState
     /// lets a crashed hideTitlebars session's windows get their true decorations back, instead of
     /// a fresh instance adopting their already-stripped current style as the new baseline.</summary>
     public int OriginalStyle { get; set; }
+
+    public bool? IsHiddenByWtile { get; set; } // null in state files saved before this existed
 }
 
 /// <summary>AOT-safe (reflection-free) JSON (de)serialization context for state.json -- mirrors

@@ -13,6 +13,10 @@ internal sealed class ManagedWindow(HWND handle)
     public int TagIndex { get; set; }
     public int MonitorIndex { get; set; }
 
+    // Not detectable while Wtile already has the window hidden on another tag: SW_HIDE on a
+    // hidden window fires no event. Accepted, since its X can't be clicked there.
+    public bool IsHiddenByApp { get; set; }
+
     /// <summary>GWL_STYLE as it was when this window was first tracked, before any titlebar
     /// hiding -- see WindowInspector.SetTitlebarHidden, which restores exactly this.</summary>
     public int OriginalStyle { get; set; }

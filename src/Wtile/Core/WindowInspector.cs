@@ -173,9 +173,13 @@ internal static unsafe class WindowInspector
     /// </summary>
     public static void SetTitlebarHidden(HWND hwnd, int originalStyle, bool hidden)
     {
+        // Setting WS_VISIBLE through GWL_STYLE shows a window with no show event, so a window
+        // hidden since its style was captured must keep its current state bits.
+        const int stateBits = (int)(WINDOW_STYLE.WS_VISIBLE | WINDOW_STYLE.WS_MINIMIZE | WINDOW_STYLE.WS_MAXIMIZE);
+        int baseStyle = (originalStyle & ~stateBits) | (GetStyle(hwnd) & stateBits);
         int target = hidden
-            ? originalStyle & ~(int)(WINDOW_STYLE.WS_CAPTION | WINDOW_STYLE.WS_THICKFRAME)
-            : originalStyle;
+            ? baseStyle & ~(int)(WINDOW_STYLE.WS_CAPTION | WINDOW_STYLE.WS_THICKFRAME)
+            : baseStyle;
         PInvoke.SetWindowLong(hwnd, WINDOW_LONG_PTR_INDEX.GWL_STYLE, target);
         PInvoke.SetWindowPos(
             hwnd, HWND.Null, 0, 0, 0, 0,

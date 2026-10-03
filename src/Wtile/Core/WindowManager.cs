@@ -21,7 +21,8 @@ internal sealed unsafe class WindowManager
     public static WindowManager? Current { get; private set; }
 
     private readonly List<ManagedWindow> _windows = [];
-    private readonly HashSet<HWND> _selfHidden = []; // hidden by ActivateTag, not a real close/hide
+    private readonly HashSet<HWND> _hiddenByWtile = [];
+    private readonly Dictionary<HWND, int> _expectedHideEvents = [];
     private readonly LayoutRegistry _layouts;
     private readonly string _defaultLayoutName;
     private readonly IReadOnlyDictionary<string, double> _defaultLayoutParams;
@@ -35,7 +36,7 @@ internal sealed unsafe class WindowManager
     /// <summary>Only non-null while Seed() is enumerating, and only when a state.json was loaded:
     /// (processName, className, originalStyle) triples from that saved state, consumed (removed)
     /// one at a time as they're matched -- see TryRecoverHidden.</summary>
-    private List<(string ProcessName, string ClassName, int OriginalStyle)>? _recoverySignatures;
+    private List<(string ProcessName, string ClassName, int OriginalStyle, bool? IsHiddenByWtile)>? _recoverySignatures;
 
     public WindowManager(LayoutRegistry layouts, string defaultLayoutName, IReadOnlyDictionary<string, double> defaultLayoutParams, int tagCount = 9)
     {
@@ -168,7 +169,7 @@ internal sealed unsafe class WindowManager
     public event Action? Changed;
 
     public bool HasWindowsOnTag(int monitorIndex, int tagIndex) =>
-        _windows.Exists(w => w.MonitorIndex == monitorIndex && (w.TagIndex == tagIndex || w.IsPinned));
+        _windows.Exists(w => w.MonitorIndex == monitorIndex && !w.IsHiddenByApp && (w.TagIndex == tagIndex || w.IsPinned));
 
     /// <summary>Call once at startup, before the first Arrange(): if the real taskbar is already
     /// hidden (e.g. a previous run hid it and exited before restoring it), recognize that instead
@@ -225,9 +226,45 @@ internal sealed unsafe class WindowManager
     /// 3-9 invisible with no way back short of relaunching Wtile to switch to their tag.</summary>
     public void RestoreAllWindows()
     {
-        foreach (HWND handle in _selfHidden)
+        foreach (HWND handle in _hiddenByWtile)
             ShowManagedWindow(handle);
-        _selfHidden.Clear();
+        _hiddenByWtile.Clear();
+    }
+
+    private void HideForTag(HWND handle)
+    {
+        _hiddenByWtile.Add(handle);
+        if (WindowInspector.IsWindowVisible(handle)) // hiding an already-hidden window fires no event
+            _expectedHideEvents[handle] = _expectedHideEvents.GetValueOrDefault(handle) + 1;
+        PInvoke.ShowWindow(handle, SHOW_WINDOW_CMD.SW_HIDE);
+    }
+
+    private bool ConsumeExpectedHideEvent(HWND handle)
+    {
+        if (!_expectedHideEvents.TryGetValue(handle, out int expected))
+            return false;
+        if (expected <= 1)
+            _expectedHideEvents.Remove(handle);
+        else
+            _expectedHideEvents[handle] = expected - 1;
+        return true;
+    }
+
+    private void MarkHiddenByApp(ManagedWindow window)
+    {
+        window.IsHiddenByApp = true;
+        _hiddenByWtile.Remove(window.Handle);
+        Console.WriteLine($"[hide] '{window.Title}' hid itself; tag switches will leave it hidden");
+    }
+
+    // Its tag no longer shows it as occupied, so it opens like a new window instead.
+    private void ReopenOnCurrentTag(ManagedWindow window)
+    {
+        window.MonitorIndex = CurrentMonitorIndex;
+        window.TagIndex = CurrentMonitor.ActiveTagIndex;
+        _windows.Remove(window);
+        _windows.Insert(0, window);
+        Arrange();
     }
 
     /// <summary>Un-hides a window Wtile previously hid for a tag/pin/monitor change. Plain
@@ -318,7 +355,7 @@ internal sealed unsafe class WindowManager
     {
         _recoverySignatures = savedState?.Windows
             .Where(w => !string.IsNullOrEmpty(w.ProcessName))
-            .Select(w => (w.ProcessName, w.ClassName, w.OriginalStyle))
+            .Select(w => (w.ProcessName, w.ClassName, w.OriginalStyle, w.IsHiddenByWtile))
             .ToList();
         PInvoke.EnumWindows(&EnumWindowsProc, 0);
         _recoverySignatures = null;
@@ -365,6 +402,7 @@ internal sealed unsafe class WindowManager
                 OriginalStyle = w.OriginalStyle,
                 IsFloating = w.IsFloating,
                 IsPinned = w.IsPinned,
+                IsHiddenByWtile = _hiddenByWtile.Contains(w.Handle),
             });
         }
 
@@ -442,22 +480,24 @@ internal sealed unsafe class WindowManager
     /// <summary>Shows/hides every tracked window to match what IsVisibleOn now says for its
     /// (possibly just-reassigned) monitor/tag -- Arrange() alone only repositions the tiled set,
     /// it doesn't show/hide anything, and every window ApplySavedState touches was already
-    /// OS-visible (WindowFilter.IsManageable requires that). Same per-window show/hide + _selfHidden
+    /// OS-visible (WindowFilter.IsManageable requires that). Same per-window show/hide + _hiddenByWtile
     /// bookkeeping ActivateTag already does, just generalized across every monitor at once.</summary>
     private void ResyncVisibility()
     {
         foreach (ManagedWindow w in _windows)
         {
+            if (w.IsHiddenByApp)
+                continue;
+
             Monitor monitor = _monitors[w.MonitorIndex];
             if (IsVisibleOn(w, monitor, w.MonitorIndex))
             {
-                _selfHidden.Remove(w.Handle);
+                _hiddenByWtile.Remove(w.Handle);
                 ShowManagedWindow(w.Handle);
             }
             else
             {
-                _selfHidden.Add(w.Handle);
-                PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_HIDE);
+                HideForTag(w.Handle);
             }
         }
 
@@ -468,7 +508,7 @@ internal sealed unsafe class WindowManager
     }
 
     /// <summary>An already-tracked window we're deliberately keeping hidden for a tag switch (see
-    /// <see cref="_selfHidden"/>) can still un-hide itself against our wishes -- e.g. a browser
+    /// <see cref="_hiddenByWtile"/>) can still un-hide itself against our wishes -- e.g. a browser
     /// reusing its existing window to open a link clicked in another app typically does
     /// ShowWindow(SW_SHOW) + SetForegroundWindow() on itself regardless of which tag Wtile
     /// currently has it parked on. Left alone, TryAdd's already-tracked early-return would leave
@@ -478,8 +518,6 @@ internal sealed unsafe class WindowManager
     /// than looking like it got dragged onto whatever tag you happened to be viewing.</summary>
     public void OnWindowShown(HWND hwnd)
     {
-        _selfHidden.Remove(hwnd);
-
         // Covers both a window we deliberately hid for a tag switch coming back on its own (the
         // browser-reusing-a-window case in the doc comment above), and one that went genuinely
         // OS-hidden without us (see OnWindowHidden) reappearing -- e.g. an app restored from a
@@ -500,6 +538,14 @@ internal sealed unsafe class WindowManager
             // right now; a genuine external show (the browser case) always still reads visible.
             if (!WindowInspector.IsWindowVisible(hwnd))
                 return;
+
+            _hiddenByWtile.Remove(hwnd);
+            if (window.IsHiddenByApp)
+            {
+                window.IsHiddenByApp = false;
+                ReopenOnCurrentTag(window);
+                return;
+            }
 
             Monitor monitor = _monitors[window.MonitorIndex];
             if (!window.IsPinned && !monitor.IsViewingAllTags && window.TagIndex != monitor.ActiveTagIndex)
@@ -561,8 +607,8 @@ internal sealed unsafe class WindowManager
 
     public void OnWindowHidden(HWND hwnd)
     {
-        if (_selfHidden.Remove(hwnd))
-            return; // we hid this ourselves for a tag switch; it's still tracked
+        if (ConsumeExpectedHideEvent(hwnd))
+            return;
 
         // EVENT_OBJECT_HIDE also fires for real hides we didn't cause -- most commonly an app
         // that "closes" to a tray icon rather than actually quitting (observed with Outlook/
@@ -575,8 +621,14 @@ internal sealed unsafe class WindowManager
         // OS-visibility (see WindowInspector.IsWindowVisible) already excludes it from
         // TiledWindowsOn/VisibleWindowsOnCurrentMonitor, and OnWindowShown will find it still
         // tracked and restore it in place if it ever reappears.
-        if (Find(hwnd) is not null)
+        if (Find(hwnd) is { } window)
+        {
+            if (!WindowInspector.IsWindowVisible(hwnd)) // skips a late event for a window that's visible again
+                MarkHiddenByApp(window);
             Arrange();
+            if (window.IsHiddenByApp && hwnd == FocusedHandle)
+                FocusSomethingOnCurrentMonitor();
+        }
     }
 
     public void OnWindowDestroyed(HWND hwnd)
@@ -589,7 +641,8 @@ internal sealed unsafe class WindowManager
         if (wasFocused)
             _suppressMonitorFollow = true;
 
-        _selfHidden.Remove(hwnd);
+        _hiddenByWtile.Remove(hwnd);
+        _expectedHideEvents.Remove(hwnd);
         if (!Remove(hwnd))
             return;
         Arrange();
@@ -786,13 +839,12 @@ internal sealed unsafe class WindowManager
         window.TagIndex = tagIndex;
         if (tagIndex == _monitors[window.MonitorIndex].ActiveTagIndex)
         {
-            _selfHidden.Remove(window.Handle);
+            _hiddenByWtile.Remove(window.Handle);
             ShowManagedWindow(window.Handle);
         }
         else
         {
-            _selfHidden.Add(window.Handle);
-            PInvoke.ShowWindow(window.Handle, SHOW_WINDOW_CMD.SW_HIDE);
+            HideForTag(window.Handle);
         }
 
         Arrange();
@@ -965,8 +1017,7 @@ internal sealed unsafe class WindowManager
         bool hidden = !window.IsPinned && !monitor.IsViewingAllTags && window.TagIndex != monitor.ActiveTagIndex;
         if (hidden)
         {
-            _selfHidden.Add(window.Handle);
-            PInvoke.ShowWindow(window.Handle, SHOW_WINDOW_CMD.SW_HIDE);
+            HideForTag(window.Handle);
         }
 
         Arrange();
@@ -994,9 +1045,9 @@ internal sealed unsafe class WindowManager
 
         foreach (ManagedWindow w in _windows)
         {
-            if (w.MonitorIndex == monitorIndex && w.TagIndex != monitor.ActiveTagIndex && !w.IsPinned)
+            if (w.MonitorIndex == monitorIndex && w.TagIndex != monitor.ActiveTagIndex && !w.IsPinned && !w.IsHiddenByApp)
             {
-                _selfHidden.Remove(w.Handle);
+                _hiddenByWtile.Remove(w.Handle);
                 ShowManagedWindow(w.Handle);
             }
         }
@@ -1027,7 +1078,7 @@ internal sealed unsafe class WindowManager
 
         foreach (ManagedWindow w in _windows)
         {
-            if (w.MonitorIndex != monitorIndex)
+            if (w.MonitorIndex != monitorIndex || w.IsHiddenByApp)
                 continue;
 
             bool wasVisible = wasViewingAll || w.TagIndex == previous || w.IsPinned;
@@ -1035,12 +1086,11 @@ internal sealed unsafe class WindowManager
 
             if (wasVisible && !shouldBeVisible)
             {
-                _selfHidden.Add(w.Handle);
-                PInvoke.ShowWindow(w.Handle, SHOW_WINDOW_CMD.SW_HIDE);
+                HideForTag(w.Handle);
             }
             else if (!wasVisible && shouldBeVisible)
             {
-                _selfHidden.Remove(w.Handle);
+                _hiddenByWtile.Remove(w.Handle);
                 ShowManagedWindow(w.Handle);
             }
         }
@@ -1101,7 +1151,7 @@ internal sealed unsafe class WindowManager
         window.IsPinned = false;
         window.MonitorIndex = targetIndex;
         window.TagIndex = target.ActiveTagIndex;
-        _selfHidden.Remove(window.Handle);
+        _hiddenByWtile.Remove(window.Handle);
         ShowManagedWindow(window.Handle);
 
         CurrentMonitorIndex = targetIndex;
@@ -1189,8 +1239,7 @@ internal sealed unsafe class WindowManager
             }
 
             // Otherwise it waits on its tag, same show/hide bookkeeping as MoveWindowToTag.
-            _selfHidden.Add(hwnd);
-            PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_HIDE);
+            HideForTag(hwnd);
         }
 
         if (arrange)
@@ -1229,14 +1278,14 @@ internal sealed unsafe class WindowManager
         int index = _recoverySignatures.FindIndex(s => s.ProcessName == processName && s.ClassName == className);
         if (index < 0)
             return;
-        int originalStyle = _recoverySignatures[index].OriginalStyle;
+        (_, _, int originalStyle, bool? wasHiddenByWtile) = _recoverySignatures[index];
         _recoverySignatures.RemoveAt(index);
 
         // Always restore the true original style, whether or not this window was also OS-hidden --
         // a visible hideTitlebars survivor needs this just as much as a hidden one.
         WindowInspector.SetTitlebarHidden(hwnd, originalStyle, hidden: false);
 
-        if (!snapshot.IsVisible)
+        if (!snapshot.IsVisible && wasHiddenByWtile != false) // an app that hid itself stays hidden
         {
             Console.WriteLine($"[recover] Un-hiding '{snapshot.Title}' (process='{processName}', class='{snapshot.ClassName}') -- "
                 + "left OS-hidden by a previous run that didn't exit cleanly.");
