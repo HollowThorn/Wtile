@@ -5,6 +5,7 @@ using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Dwm;
 using Windows.Win32.Graphics.Gdi;
 using Windows.Win32.System.Threading;
+using Windows.Win32.UI.Input.KeyboardAndMouse;
 using Windows.Win32.UI.WindowsAndMessaging;
 using Wtile.Layouts;
 
@@ -210,6 +211,8 @@ internal static unsafe class WindowInspector
             && PInvoke.AttachThreadInput(currentThreadId, targetThreadId, true);
 
         PInvoke.SetForegroundWindow(target);
+        if (PInvoke.GetForegroundWindow() != target)
+            RetryForegroundAfterEmptyInput(target);
         PInvoke.BringWindowToTop(target);
 
         // SetForegroundWindow only activates `target` (topmost, highlighted titlebar) -- actual
@@ -225,6 +228,17 @@ internal static unsafe class WindowInspector
             PInvoke.AttachThreadInput(currentThreadId, targetThreadId, false);
         if (attachedForeground)
             PInvoke.AttachThreadInput(currentThreadId, foregroundThreadId, false);
+    }
+
+    // Right after login there's often no foreground window to attach to, and Windows refuses the
+    // request. A process that sent the last input event may take the foreground, and an empty
+    // mouse input qualifies without moving the cursor or reaching any app as a keystroke.
+    private static void RetryForegroundAfterEmptyInput(HWND target)
+    {
+        Span<INPUT> emptyMouseInput = [new INPUT { type = INPUT_TYPE.INPUT_MOUSE }];
+        PInvoke.SendInput(emptyMouseInput, sizeof(INPUT));
+        bool succeeded = PInvoke.SetForegroundWindow(target);
+        Console.WriteLine($"[focus] Foreground request refused; retry {(succeeded ? "succeeded" : "failed too")}.");
     }
 
     /// <summary>
