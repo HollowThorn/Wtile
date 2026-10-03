@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Wtile.Core;
 using Wtile.Hotkeys;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -55,6 +56,13 @@ public static class ConfigLoader
             warnings.Add("general.focusedBorderWidth cannot be negative; clamped to 0.");
             config.General.FocusedBorderWidth = 0;
         }
+        string launchOnBoot = (config.General.LaunchOnBoot ?? "").Trim().ToLowerInvariant();
+        if (!LaunchOnBoot.IsValidMode(launchOnBoot))
+        {
+            warnings.Add($"general.launchOnBoot must be off, user or admin (was '{config.General.LaunchOnBoot}'); defaulting to off.");
+            launchOnBoot = LaunchOnBoot.Off;
+        }
+        config.General.LaunchOnBoot = launchOnBoot;
 
         if (config.Layouts.Count == 0)
         {

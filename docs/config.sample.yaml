@@ -30,15 +30,15 @@ general:
   # used to recover a window left OS-hidden or titlebar-stripped by an unclean exit -- that's a
   # correctness safety net, not something this setting controls.
   rememberState: false
-  # Starts Wtile at Windows login via the per-user Run registry key (no admin needed -- the same
-  # thing Steam/Discord's "run at startup" checkbox does), pointing at whichever Wtile.exe is
-  # currently running. Left out (the default), the tray icon's right-click "Launch on boot" item
-  # is the only control and Windows remembers whatever it last set. Set to true or false here and
-  # that wins on every startup and reload, silently undoing the tray toggle -- so pick one. With
-  # several Wtile builds around (this config is shared by all of them), only one is ever
-  # registered: with "true" here it's whichever ran last, with the line left out it's whichever
-  # you last ticked from the tray -- the tick shows only the build you're in.
-  # launchOnBoot: true
+  # Start Wtile at Windows login, pointing at whichever Wtile.exe applies this config:
+  #   off    don't start at login (removes any registration a previous setting made)
+  #   user   start with normal rights, via the per-user Run registry key
+  #   admin  start as administrator, via a scheduled logon task. Needed to tile windows running
+  #          as administrator, which a non-elevated Wtile isn't allowed to move. Also starts
+  #          sooner, since Windows delays Run key entries after login. Apps Wtile launches
+  #          inherit the elevation. Switching to or from admin from a non-elevated Wtile asks
+  #          for permission once (UAC).
+  launchOnBoot: off
 
 # blacklist: exclude specific windows from tiling entirely, matched by regex against the
 # window's process name, window class name, and/or title (case-insensitive, unanchored -- add
@@ -350,3 +350,5 @@ hotkeys:
     command: quit
   - keys: "Win+Shift+R"           # re-reads config.yaml and refreshes bar/screen geometry in place
     command: reload
+  - keys: "Win+Shift+C"           # opens config.yaml in your default editor (Notepad if none)
+    command: open-config
