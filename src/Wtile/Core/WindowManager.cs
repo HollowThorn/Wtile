@@ -1215,6 +1215,7 @@ internal sealed unsafe class WindowManager
             MonitorIndex = monitorIndex,
             TagIndex = tagRule?.TagIndex ?? monitor.ActiveTagIndex,
             OriginalStyle = WindowInspector.GetStyle(hwnd),
+            IsMinimized = PInvoke.IsIconic(hwnd),
         };
         Console.WriteLine($"[manage] '{window.Title}' (class='{window.ClassName}')");
         _windows.Insert(0, window); // dwm-style: a new window becomes master
