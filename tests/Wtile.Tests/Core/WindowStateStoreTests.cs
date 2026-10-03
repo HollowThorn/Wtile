@@ -28,6 +28,7 @@ public class WindowStateStoreTests
                         IsFloating = true,
                         IsPinned = false,
                         OriginalStyle = 0x16CA0000,
+                        IsHiddenByWtile = true,
                     },
                 ],
             };
@@ -52,6 +53,24 @@ public class WindowStateStoreTests
             Assert.True(w.IsFloating);
             Assert.False(w.IsPinned);
             Assert.Equal(0x16CA0000, w.OriginalStyle);
+            Assert.True(w.IsHiddenByWtile);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void TryLoad_StateFromBeforeIsHiddenByWtile_LeavesItNull()
+    {
+        string path = TempPath();
+        try
+        {
+            File.WriteAllText(path, """{ "Windows": [ { "ProcessName": "app.exe", "ClassName": "AppClass" } ] }""");
+
+            Assert.True(WindowStateStore.TryLoad(path, out SavedState state));
+            Assert.Null(state.Windows[0].IsHiddenByWtile);
         }
         finally
         {
