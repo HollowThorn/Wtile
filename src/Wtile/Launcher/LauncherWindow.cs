@@ -160,14 +160,7 @@ internal sealed unsafe class LauncherWindow : IDisposable
 
     private static void Launch(LauncherEntry entry)
     {
-        try
-        {
-            Process.Start(new ProcessStartInfo(entry.LaunchTarget) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[launcher] Failed to start '{entry.LaunchTarget}': {ex.Message}");
-        }
+        ProcessLauncher.TryStart(new ProcessStartInfo(entry.LaunchTarget) { UseShellExecute = true }, "launcher");
     }
 
     private static void EnsureClassRegistered()

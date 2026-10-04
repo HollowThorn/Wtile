@@ -11,10 +11,9 @@ namespace Wtile.Core;
 /// <summary>
 /// A single notification-area icon for the process's whole lifetime (Program.cs owns the one
 /// instance), same as Steam/Teams running with no visible window of their own. Right-click opens
-/// a small menu that just calls into existing commands -- "reload"/"quit", the same ones
-/// Win+Shift+R/Win+Shift+Q already run, plus a checkable "Launch on boot" item over
-/// "toggle-launch-on-boot" -- rather than duplicating that logic. Left-click does
-/// nothing: there's no window to restore, so unlike Steam/Teams there's nothing useful to do on a
+/// a small menu that just calls into existing commands ("open-config", plus "reload" and "quit",
+/// the same ones Win+Shift+R/Win+Shift+Q already run) rather than duplicating that logic.
+/// Left-click does nothing: there's no window to restore, so there's nothing useful to do on a
 /// plain click.
 /// </summary>
 internal sealed unsafe class TrayIcon : IDisposable
@@ -27,7 +26,7 @@ internal sealed unsafe class TrayIcon : IDisposable
 
     private const uint MenuIdReload = 1;
     private const uint MenuIdQuit = 2;
-    private const uint MenuIdLaunchOnBoot = 3;
+    private const uint MenuIdOpenConfig = 3;
 
     /// <summary>RT_GROUP_ICON id the .NET SDK embeds Wtile.csproj's &lt;ApplicationIcon&gt; under
     /// (same ordinal as IDI_APPLICATION, which is coincidental -- this loads Wtile's own icon out
@@ -76,11 +75,7 @@ internal sealed unsafe class TrayIcon : IDisposable
     private void ShowContextMenu()
     {
         using DestroyMenuSafeHandle menu = PInvoke.CreatePopupMenu_SafeHandle();
-        // Check state is read fresh each time the menu opens, so it stays honest if the Run entry
-        // was changed from outside (config reload, or the user editing the registry directly).
-        MENU_ITEM_FLAGS launchOnBootFlags = MENU_ITEM_FLAGS.MF_STRING
-            | (StartupRegistration.IsEnabled() ? MENU_ITEM_FLAGS.MF_CHECKED : MENU_ITEM_FLAGS.MF_UNCHECKED);
-        PInvoke.AppendMenu(menu, launchOnBootFlags, MenuIdLaunchOnBoot, "Launch on boot");
+        PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, MenuIdOpenConfig, "Open config");
         PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, MenuIdReload, "Reload config");
         PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, MenuIdQuit, "Quit Wtile");
 
@@ -107,8 +102,8 @@ internal sealed unsafe class TrayIcon : IDisposable
 
     private void ExecuteMenuCommand(uint id)
     {
-        if (id == MenuIdLaunchOnBoot)
-            _commands.TryExecute("toggle-launch-on-boot", []);
+        if (id == MenuIdOpenConfig)
+            _commands.TryExecute("open-config", []);
         else if (id == MenuIdReload)
             _commands.TryExecute("reload", []);
         else if (id == MenuIdQuit)

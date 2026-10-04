@@ -118,26 +118,37 @@ public class ConfigLoaderTests
         Assert.Contains(result.Warnings, w => w.Contains("focusedBorderWidth"));
     }
 
-    // Omitted means StartupRegistration.ApplyConfig leaves the Run key alone -- so a config written
-    // before launchOnBoot existed (or the shipped sample, which keeps it commented out) never
-    // registers Wtile at login by itself; only the tray toggle or an explicit true does.
     [Fact]
-    public void LaunchOnBoot_OmittedIsNull_SoExistingConfigsStayOff()
+    public void LaunchOnBoot_OmittedIsOff()
     {
-        Assert.Null(ConfigLoader.Load("general:\n  tagCount: 9\n").Config.General.LaunchOnBoot);
-        Assert.Null(ConfigLoader.Load("").Config.General.LaunchOnBoot);
-        Assert.Null(ConfigLoader.LoadFromFile(SampleConfigPath).Config.General.LaunchOnBoot);
+        Assert.Equal("off", ConfigLoader.Load("general:\n  tagCount: 9\n").Config.General.LaunchOnBoot);
+        Assert.Equal("off", ConfigLoader.Load("").Config.General.LaunchOnBoot);
+        Assert.Equal("off", ConfigLoader.LoadFromFile(SampleConfigPath).Config.General.LaunchOnBoot);
     }
 
     [Theory]
-    [InlineData("true", true)]
-    [InlineData("false", false)]
-    public void LaunchOnBoot_ExplicitValueIsParsed(string value, bool expected)
+    [InlineData("off", "off")]
+    [InlineData("user", "user")]
+    [InlineData("admin", "admin")]
+    [InlineData(" Admin ", "admin")]
+    public void LaunchOnBoot_ValidModeIsNormalized(string value, string expected)
     {
-        ConfigLoadResult result = ConfigLoader.Load($"general:\n  launchOnBoot: {value}\n");
+        ConfigLoadResult result = ConfigLoader.Load($"general:\n  launchOnBoot: \"{value}\"\n");
 
         Assert.Equal(expected, result.Config.General.LaunchOnBoot);
         Assert.Empty(result.Warnings);
+    }
+
+    [Theory]
+    [InlineData("true")]
+    [InlineData("elevated")]
+    [InlineData("")]
+    public void LaunchOnBoot_InvalidModeFallsBackToOffWithWarning(string value)
+    {
+        ConfigLoadResult result = ConfigLoader.Load($"general:\n  launchOnBoot: \"{value}\"\n");
+
+        Assert.Equal("off", result.Config.General.LaunchOnBoot);
+        Assert.Contains(result.Warnings, w => w.Contains("launchOnBoot"));
     }
 
     [Fact]

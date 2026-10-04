@@ -50,13 +50,8 @@ public sealed class GeneralConfig
     /// safety net, not something this setting controls (see WindowManager.TryRecoverHidden).</summary>
     public bool RememberState { get; set; } = false;
 
-    /// <summary>Registers Wtile to start at Windows login (per-user Run key, see
-    /// StartupRegistration). Deliberately nullable: omitted means "don't touch it", leaving the
-    /// tray menu's "Launch on boot" toggle as the only control (Windows keeps whatever it last
-    /// set); an explicit true/false is enforced on every startup and reload and so overrides
-    /// the tray toggle. A plain bool defaulting to false would silently unregister on the next
-    /// reload after someone turned it on from the tray.</summary>
-    public bool? LaunchOnBoot { get; set; }
+    // "off" | "user" | "admin"; see Core/LaunchOnBoot.cs.
+    public string LaunchOnBoot { get; set; } = "off";
 }
 
 public sealed class LayoutConfig
