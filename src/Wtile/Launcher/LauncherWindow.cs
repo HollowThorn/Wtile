@@ -42,6 +42,7 @@ internal sealed unsafe class LauncherWindow : IDisposable
     private string _query = "";
     private int _selectedIndex;
     private bool _visible;
+    private bool _elevated;
     private HWND _previousForeground;
 
     /// <summary>Guards the synchronous WM_ACTIVATE that firing SetForegroundWindow/SetFocus sends
@@ -84,16 +85,24 @@ internal sealed unsafe class LauncherWindow : IDisposable
         }
     }
 
-    public void Toggle()
+    /// <summary>
+    /// <paramref name="elevated"/>: launch whatever gets picked at admin privileges -- only
+    /// meaningful when Wtile itself is already running elevated (Environment.IsPrivilegedProcess),
+    /// since Wtile can't hand out privileges it doesn't have; otherwise this behaves exactly like
+    /// the non-elevated toggle. A non-elevated toggle always launches at the interactive user's own
+    /// privilege level, even from an elevated Wtile -- see ProcessLauncher.TryStartDeElevated.
+    /// </summary>
+    public void Toggle(bool elevated = false)
     {
         if (_visible)
             Hide();
         else
-            Show();
+            Show(elevated);
     }
 
-    private void Show()
+    private void Show(bool elevated)
     {
+        _elevated = elevated && Environment.IsPrivilegedProcess;
         _previousForeground = PInvoke.GetForegroundWindow();
 
         _allEntries = AppCatalog.Build();
@@ -158,9 +167,12 @@ internal sealed unsafe class LauncherWindow : IDisposable
         Hide();
     }
 
-    private static void Launch(LauncherEntry entry)
+    private void Launch(LauncherEntry entry)
     {
-        ProcessLauncher.TryStart(new ProcessStartInfo(entry.LaunchTarget) { UseShellExecute = true }, "launcher");
+        if (_elevated)
+            ProcessLauncher.TryStart(new ProcessStartInfo(entry.LaunchTarget) { UseShellExecute = true }, "launcher");
+        else
+            ProcessLauncher.TryStartDeElevated(entry.LaunchTarget, "launcher");
     }
 
     private static void EnsureClassRegistered()
