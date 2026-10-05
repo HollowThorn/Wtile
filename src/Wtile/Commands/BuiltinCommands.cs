@@ -296,11 +296,14 @@ internal sealed class ReloadCommand(string configPath, ConfigApplier applier, IR
 
 /// <summary>Toggles the dmenu-style app launcher popup (PATH executables + Start Menu shortcuts,
 /// fuzzy-filtered). Registered separately in Program.cs (not CreateDefault below), same reason as
-/// ReloadCommand: needs LauncherWindow, which is constructed after the initial CommandRegistry.</summary>
+/// ReloadCommand: needs LauncherWindow, which is constructed after the initial CommandRegistry.
+/// Args: <c>["elevated"]</c> to launch whatever gets picked at admin privileges (only when Wtile
+/// itself is already elevated -- see LauncherWindow.Toggle); omitted or anything else means the
+/// normal, always-unelevated toggle.</summary>
 internal sealed class AppLauncherCommand(LauncherWindow launcher) : ICommand
 {
     public string Name => "app-launcher";
-    public void Execute(IReadOnlyList<string> args) => launcher.Toggle();
+    public void Execute(IReadOnlyList<string> args) => launcher.Toggle(args.Contains("elevated"));
 }
 
 /// <summary>Shows/hides Wtile's own bar on every monitor together (dwm/bug.n-style hiding of the

@@ -129,3 +129,12 @@ ABE_TOP
 ABE_BOTTOM
 IsIconic
 WM_NULL
+OpenProcessToken
+DuplicateTokenEx
+CreateProcessWithTokenW
+SECURITY_IMPERSONATION_LEVEL
+TOKEN_TYPE
+CREATE_PROCESS_LOGON_FLAGS
+IShellLinkW
+IPersistFile
+ShellLink

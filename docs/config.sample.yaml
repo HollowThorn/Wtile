@@ -173,8 +173,18 @@ hotkeys:
   # Type to filter, Tab/Right/Left to change the highlighted match, Enter to launch it, Escape (or
   # clicking away) to dismiss without launching. Escape is unbound everywhere else by default, so
   # this is safe out of the box.
+  #
+  # Whatever gets launched always runs at your normal, unelevated privilege level, even if Wtile
+  # itself is running as administrator (launch-on-boot: admin) -- Wtile never silently hands an
+  # ordinary app the same admin rights it runs with. Use Win+Shift+Escape instead when you
+  # specifically want the picked app to run elevated; it only actually elevates when Wtile itself
+  # is already running as administrator, since Wtile can't grant privileges it doesn't have --
+  # otherwise it behaves exactly like plain Win+Escape.
   - keys: "Win+Escape"
     command: app-launcher
+  - keys: "Win+Shift+Escape"
+    command: app-launcher
+    args: ["elevated"]
 
   # --- focus / window ---
   - keys: "Win+J"

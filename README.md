@@ -44,7 +44,9 @@ Actively developed, not yet a 1.0. Expect rough edges.
   tags" (`view(~0)`).
 - **dmenu-style app launcher** (`Win+Escape` by default): a fuzzy-filterable popup flush against
   the bar, listing PATH executables and Start Menu shortcuts — type to filter, arrow/Tab to pick,
-  Enter to launch.
+  Enter to launch. Always launches at your normal, unelevated privilege level, even when Wtile
+  itself is running as administrator; `Win+Shift+Escape` launches the picked app elevated instead,
+  when Wtile itself is already elevated.
 - **Fully configurable via YAML**, hot-reloadable with a single hotkey (no background file
   watcher — you press reload after editing, or after changing monitor setup).
 - Optional **taskbar hiding** and **title-bar/border stripping** per window, for a cleaner,
