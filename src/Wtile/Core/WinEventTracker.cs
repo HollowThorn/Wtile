@@ -84,6 +84,15 @@ internal sealed unsafe class WinEventTracker : IDisposable
             case PInvoke.EVENT_OBJECT_NAMECHANGE:
                 target.OnTitleChanged(hwnd);
                 break;
+            case PInvoke.EVENT_SYSTEM_MOVESIZESTART:
+                target.OnMoveSizeStart(hwnd);
+                break;
+            case PInvoke.EVENT_OBJECT_LOCATIONCHANGE:
+                target.OnLocationChanged(hwnd);
+                break;
+            case PInvoke.EVENT_SYSTEM_MOVESIZEEND:
+                target.OnMoveSizeEnd(hwnd);
+                break;
         }
     }
 

@@ -38,7 +38,6 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
     private int _width;
     private Color _color;
     private bool _visible;
-    private RECT? _lastRect; // dedupes [border] log spam -- see Refresh()
 
     public FocusBorderWindow(WindowManager manager, int width, string colorHtml)
     {
@@ -96,7 +95,8 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
             }
         }
 
-        if (_width <= 0 || focused is null || focused.IsMinimized)
+        // Following a drag every mouse step costs too much CPU.
+        if (_width <= 0 || focused is null || focused.IsMinimized || focused.Handle == _manager.MoveSizeHandle)
         {
             Hide();
             return;
@@ -140,15 +140,6 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
         {
             Hide();
             return;
-        }
-
-        // Temporary diagnostic: only logs when the measured rect actually changes (not every
-        // ~150ms poll tick), so a burst of these while dragging confirms the poll is both firing
-        // and picking up the live position; silence during a drag means it isn't.
-        if (_lastRect is null || !_lastRect.Value.Equals(r))
-        {
-            Console.WriteLine($"[border] '{focused.Title}' -> ({r.left},{r.top}) {w}x{h}");
-            _lastRect = r;
         }
 
         int bw = Math.Min(_width, Math.Min(w, h) / 2); // never let strips overlap past the window's own center

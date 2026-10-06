@@ -33,6 +33,11 @@ internal sealed unsafe class WindowManager
     private int _lastReportedMonitorCount = -1; // see RefreshMonitors: keeps its log to once per change
     private bool _suppressMonitorFollow; // see OnWindowDestroyed/OnForegroundChanged
 
+    private HWND _dragHandle;
+    private RECT _dragStartRect;
+    private bool _dragDetached;
+    private const int DragDetachThreshold = 10;
+
     /// <summary>Only non-null while Seed() is enumerating, and only when a state.json was loaded:
     /// (processName, className, originalStyle) triples from that saved state, consumed (removed)
     /// one at a time as they're matched -- see TryRecoverHidden.</summary>
@@ -167,6 +172,8 @@ internal sealed unsafe class WindowManager
 
     /// <summary>Fires after any state change any bar might need to redraw for (arrange, focus, tag switch).</summary>
     public event Action? Changed;
+
+    public HWND MoveSizeHandle { get; private set; }
 
     public bool HasWindowsOnTag(int monitorIndex, int tagIndex) =>
         _windows.Exists(w => w.MonitorIndex == monitorIndex && !w.IsHiddenByApp && (w.TagIndex == tagIndex || w.IsPinned));
@@ -643,6 +650,10 @@ internal sealed unsafe class WindowManager
 
         _hiddenByWtile.Remove(hwnd);
         _expectedHideEvents.Remove(hwnd);
+        if (hwnd == _dragHandle)
+            EndDrag();
+        if (hwnd == MoveSizeHandle)
+            MoveSizeHandle = HWND.Null;
         if (!Remove(hwnd))
             return;
         Arrange();
@@ -706,6 +717,9 @@ internal sealed unsafe class WindowManager
             }
         }
 
+        if (!MoveSizeHandle.IsNull && hwnd != MoveSizeHandle)
+            AbandonStaleMoveSize();
+
         // Desktop focused = no client selected (dwm's root window), not a window called
         // "Program Manager".
         if (hwnd == PInvoke.GetShellWindow())
@@ -761,6 +775,128 @@ internal sealed unsafe class WindowManager
             FocusedTitle = WindowInspector.GetWindowText(hwnd);
             Changed?.Invoke();
         }
+    }
+
+    public void OnMoveSizeStart(HWND hwnd)
+    {
+        AbandonStaleMoveSize();
+        ManagedWindow? window = Find(hwnd);
+        if (window is null)
+            return;
+        MoveSizeHandle = hwnd;
+        Changed?.Invoke();
+
+        if (!IsTiled(window, _monitors[window.MonitorIndex], window.MonitorIndex))
+            return;
+        if (!PInvoke.GetWindowRect(hwnd, out _dragStartRect))
+            return;
+        _dragHandle = hwnd;
+        _dragDetached = false;
+    }
+
+    public void OnLocationChanged(HWND hwnd)
+    {
+        if (hwnd != _dragHandle || _dragDetached || !PInvoke.GetWindowRect(hwnd, out RECT rect))
+            return;
+        if (!IsMovedWithoutResize(_dragStartRect, rect))
+            return;
+
+        _dragDetached = true;
+        Arrange();
+    }
+
+    private static bool IsMovedWithoutResize(RECT start, RECT now)
+    {
+        bool sameSize = now.right - now.left == start.right - start.left && now.bottom - now.top == start.bottom - start.top;
+        int dx = now.left - start.left;
+        int dy = now.top - start.top;
+        return sameSize && dx * dx + dy * dy >= DragDetachThreshold * DragDetachThreshold;
+    }
+
+    public void OnMoveSizeEnd(HWND hwnd)
+    {
+        if (hwnd == MoveSizeHandle)
+        {
+            MoveSizeHandle = HWND.Null;
+            Changed?.Invoke();
+        }
+        if (hwnd != _dragHandle)
+            return;
+        bool detached = _dragDetached;
+        EndDrag();
+
+        if (detached && !IsDragCancelled(hwnd) && Find(hwnd) is { } window)
+            DropAtCursor(window);
+        Arrange();
+    }
+
+    // Escape puts the window back where the drag started before the end event fires.
+    private bool IsDragCancelled(HWND hwnd) =>
+        PInvoke.GetWindowRect(hwnd, out RECT rect) && rect.Equals(_dragStartRect);
+
+    // The end event can go missing (e.g. the app hangs mid-drag); don't leave its window untiled.
+    private void AbandonStaleMoveSize()
+    {
+        if (MoveSizeHandle.IsNull && _dragHandle.IsNull)
+            return;
+        bool wasDetached = _dragDetached;
+        MoveSizeHandle = HWND.Null;
+        EndDrag();
+        if (wasDetached)
+            Arrange();
+        else
+            Changed?.Invoke();
+    }
+
+    private void EndDrag()
+    {
+        _dragHandle = HWND.Null;
+        _dragDetached = false;
+    }
+
+    private void DropAtCursor(ManagedWindow window)
+    {
+        if (!PInvoke.GetCursorPos(out var cursor))
+            return;
+
+        HMONITOR cursorMonitor = PInvoke.MonitorFromPoint(cursor, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
+        int monitorIndex = _monitors.FindIndex(m => m.Handle == cursorMonitor);
+        if (monitorIndex < 0)
+            monitorIndex = window.MonitorIndex;
+        Monitor monitor = _monitors[monitorIndex];
+
+        if (monitorIndex != window.MonitorIndex)
+        {
+            window.IsPinned = false;
+            window.MonitorIndex = monitorIndex;
+            window.TagIndex = monitor.ActiveTagIndex;
+            CurrentMonitorIndex = monitorIndex;
+        }
+
+        ManagedWindow? target = null;
+        LayoutRect targetRect = default;
+        long bestDistance = long.MaxValue;
+        foreach (ManagedWindow tile in TiledWindowsOn(monitor, monitorIndex))
+        {
+            if (ReferenceEquals(tile, window))
+                continue;
+            RECT b = WindowInspector.GetVisibleBounds(tile.Handle);
+            var rect = new LayoutRect(b.left, b.top, b.right - b.left, b.bottom - b.top);
+            long distance = DropTarget.DistanceSquaredToRect(rect, cursor.X, cursor.Y);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                target = tile;
+                targetRect = rect;
+            }
+        }
+
+        if (target is null)
+            return; // nothing else tiled there: it simply becomes the monitor's only tile
+
+        _windows.Remove(window);
+        int index = _windows.IndexOf(target) + (DropTarget.DropsAfterTile(targetRect, cursor.X, cursor.Y) ? 1 : 0);
+        _windows.Insert(index, window);
     }
 
     /// <summary>Moves focus to the next/previous window in stack order (dwm's focusstack), on the
@@ -859,8 +995,12 @@ internal sealed unsafe class WindowManager
     {
         ManagedWindow? window = Find(FocusedHandle);
         if (window is null)
+        {
+            Console.WriteLine($"[float] toggle ignored: focused window {FocusedHandle} ('{FocusedTitle}') isn't managed");
             return;
+        }
         window.IsFloating = !window.IsFloating;
+        Console.WriteLine($"[float] '{window.Title}' -> {(window.IsFloating ? "floating" : "tiled")}");
         Arrange();
     }
 
@@ -957,8 +1097,12 @@ internal sealed unsafe class WindowManager
     private List<ManagedWindow> TiledWindowsOnCurrentMonitor() => TiledWindowsOn(CurrentMonitor, CurrentMonitorIndex);
 
     private List<ManagedWindow> TiledWindowsOn(Monitor monitor, int monitorIndex) =>
-        _windows.FindAll(w => IsVisibleOn(w, monitor, monitorIndex) && !w.IsMinimized && !w.IsFloating
-            && !WindowInspector.IsCloaked(w.Handle) && WindowInspector.IsWindowVisible(w.Handle));
+        _windows.FindAll(w => IsTiled(w, monitor, monitorIndex));
+
+    private bool IsTiled(ManagedWindow w, Monitor monitor, int monitorIndex) =>
+        IsVisibleOn(w, monitor, monitorIndex) && !w.IsMinimized && !w.IsFloating
+            && !(_dragDetached && w.Handle == _dragHandle)
+            && !WindowInspector.IsCloaked(w.Handle) && WindowInspector.IsWindowVisible(w.Handle);
 
     private List<ManagedWindow> VisibleWindowsOnCurrentMonitor() =>
         _windows.FindAll(w => IsVisibleOn(w, CurrentMonitor, CurrentMonitorIndex) && !w.IsMinimized
