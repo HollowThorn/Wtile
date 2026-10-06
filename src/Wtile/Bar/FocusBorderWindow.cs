@@ -95,7 +95,6 @@ internal sealed unsafe class FocusBorderWindow : IDisposable
             }
         }
 
-        // Following a drag every mouse step costs too much CPU.
         if (_width <= 0 || focused is null || focused.IsMinimized || focused.Handle == _manager.MoveSizeHandle)
         {
             Hide();
