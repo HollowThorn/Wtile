@@ -1388,7 +1388,22 @@ internal sealed unsafe class WindowManager
         }
 
         if (arrange)
+        {
             Arrange();
+
+            // dwm's manage() ends with focus(c): a brand-new window becomes master and should
+            // take real keyboard focus, not just Wtile's FocusedHandle bookkeeping. Leaving this
+            // to the app's own self-activation (the usual way a freshly created window becomes
+            // foreground) races against the Arrange() call just above repositioning/resizing it --
+            // observed live with WezTerm (and intermittently elsewhere): the window reads as
+            // foreground and gets Wtile's focus border, but keeps routing keystrokes to whatever
+            // previously had focus, until something else (e.g. a tag switch) happens to call
+            // ForceSetForegroundWindow and it sticks. Doing the same AttachThreadInput+SetFocus
+            // dance here, after arranging rather than racing it, closes that window. Skipped when
+            // the window just got hidden for its own tag above -- nothing to focus yet.
+            if (IsVisibleOn(window, monitor, monitorIndex))
+                WindowInspector.ForceSetForegroundWindow(hwnd);
+        }
     }
 
     /// <summary>A window Wtile itself hid for a tag switch (SW_HIDE), or stripped of its titlebar
