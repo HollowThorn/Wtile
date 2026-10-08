@@ -17,6 +17,7 @@ public class ConfigLoaderTests
         Assert.Single(result.Config.Layouts);
         Assert.Equal("master-stack", result.Config.Layouts[0].Name);
         Assert.Equal("top", result.Config.Bar.Position);
+        Assert.True(result.Config.General.NewIsMaster);
     }
 
     [Fact]
@@ -34,6 +35,20 @@ public class ConfigLoaderTests
         Assert.Equal(5, result.Config.General.TagCount);
         Assert.True(result.Config.General.FocusFollowsMouse);
         Assert.Equal(8, result.Config.General.BorderGap);
+        Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
+    public void ParsesNewIsMaster()
+    {
+        const string yaml = """
+            general:
+              newIsMaster: false
+            """;
+
+        ConfigLoadResult result = ConfigLoader.Load(yaml);
+
+        Assert.False(result.Config.General.NewIsMaster);
         Assert.Empty(result.Warnings);
     }
 

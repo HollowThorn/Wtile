@@ -170,6 +170,12 @@ internal sealed unsafe class WindowManager
     /// a plain flag with no side effects, same shape as <see cref="SetBlacklist"/>.</summary>
     public bool RememberState { get; private set; }
 
+    /// <summary>Global config-driven flag (general.newIsMaster): whether a newly-opened window
+    /// becomes the new master (dwm's attach, the default) or attaches right after the current
+    /// master instead (dwm's attachaside), leaving the existing master in place -- see TryAdd.
+    /// On by default, same as every other dwm-compatible default in here.</summary>
+    public bool NewIsMaster { get; private set; } = true;
+
     /// <summary>Fires after any state change any bar might need to redraw for (arrange, focus, tag switch).</summary>
     public event Action? Changed;
 
@@ -217,6 +223,8 @@ internal sealed unsafe class WindowManager
         _rulesNeedProcessName = _blacklist.Any(r => r.ProcessName is not null) || _tagRules.Any(r => r.Match.ProcessName is not null);
 
     public void SetRememberState(bool enabled) => RememberState = enabled;
+
+    public void SetNewIsMaster(bool enabled) => NewIsMaster = enabled;
 
     public void SetHideTitlebars(bool hidden)
     {
@@ -1362,7 +1370,17 @@ internal sealed unsafe class WindowManager
             IsMinimized = PInvoke.IsIconic(hwnd),
         };
         Console.WriteLine($"[manage] '{window.Title}' (class='{window.ClassName}')");
-        _windows.Insert(0, window); // dwm-style: a new window becomes master
+        if (NewIsMaster)
+        {
+            _windows.Insert(0, window); // dwm-style: a new window becomes master
+        }
+        else
+        {
+            // dwm's attachaside: leave the current master (if any) where it is and attach the
+            // new window right after it instead, so it doesn't jump to master on open.
+            int masterIndex = _windows.FindIndex(w => w.MonitorIndex == window.MonitorIndex && w.TagIndex == window.TagIndex && !w.IsFloating);
+            _windows.Insert(masterIndex < 0 ? 0 : masterIndex + 1, window);
+        }
         if (HideTitlebars && !IsTitlebarHideExempt(window.ClassName))
             WindowInspector.SetTitlebarHidden(hwnd, window.OriginalStyle, hidden: true);
 
