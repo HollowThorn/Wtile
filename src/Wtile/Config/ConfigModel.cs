@@ -52,6 +52,12 @@ public sealed class GeneralConfig
 
     // "off" | "user" | "admin"; see Core/LaunchOnBoot.cs.
     public string LaunchOnBoot { get; set; } = "off";
+
+    /// <summary>dwm's attach vs. attachaside: whether a newly-opened window becomes the new
+    /// master (dwm-style, the default) or attaches right after the current master instead,
+    /// leaving it in place. Applies to every layout with a master concept (master-stack,
+    /// master-stack-right, centered-master) -- see WindowManager.TryAdd.</summary>
+    public bool NewIsMaster { get; set; } = true;
 }
 
 public sealed class LayoutConfig

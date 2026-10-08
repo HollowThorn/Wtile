@@ -57,6 +57,8 @@ Actively developed, not yet a 1.0. Expect rough edges.
 - Optional **launch on boot** (`launchOnBoot: off | user | admin`): starts Wtile with Windows,
   either with normal rights (per-user Run key) or as administrator (scheduled logon task), so it
   can also tile windows running as administrator.
+- `newIsMaster` (default `true`): turn off to keep the current master in place when a new window
+  opens, instead of it automatically becoming the new master.
 
 
 ## Download

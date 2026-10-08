@@ -30,6 +30,11 @@ general:
   # used to recover a window left OS-hidden or titlebar-stripped by an unclean exit -- that's a
   # correctness safety net, not something this setting controls.
   rememberState: false
+  # dwm's attach vs. attachaside: whether a newly-opened window becomes the new master (true,
+  # the default) or attaches right after the current master instead, leaving it in place and
+  # pushing everything else down the stack. Applies to every layout with a master concept
+  # (master-stack, master-stack-right, centered-master).
+  newIsMaster: true
   # Start Wtile at Windows login, pointing at whichever Wtile.exe applies this config:
   #   off    don't start at login (removes any registration a previous setting made)
   #   user   start with normal rights, via the per-user Run registry key
