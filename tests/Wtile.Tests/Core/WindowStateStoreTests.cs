@@ -22,6 +22,7 @@ public class WindowStateStoreTests
                     {
                         ProcessName = "chrome.exe",
                         ClassName = "Chrome_WidgetWin_1",
+                        Handle = 0x00ABCDEF,
                         Title = "Example — Chrome",
                         MonitorIndex = 0,
                         TagIndex = 2,
@@ -47,6 +48,7 @@ public class WindowStateStoreTests
             SavedWindowState w = result.Windows[0];
             Assert.Equal("chrome.exe", w.ProcessName);
             Assert.Equal("Chrome_WidgetWin_1", w.ClassName);
+            Assert.Equal(0x00ABCDEF, w.Handle);
             Assert.Equal("Example — Chrome", w.Title);
             Assert.Equal(0, w.MonitorIndex);
             Assert.Equal(2, w.TagIndex);
@@ -71,6 +73,23 @@ public class WindowStateStoreTests
 
             Assert.True(WindowStateStore.TryLoad(path, out SavedState state));
             Assert.Null(state.Windows[0].IsHiddenByWtile);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void TryLoad_StateFromBeforeHandle_DefaultsToZero()
+    {
+        string path = TempPath();
+        try
+        {
+            File.WriteAllText(path, """{ "Windows": [ { "ProcessName": "app.exe", "ClassName": "AppClass" } ] }""");
+
+            Assert.True(WindowStateStore.TryLoad(path, out SavedState state));
+            Assert.Equal(0, state.Windows[0].Handle);
         }
         finally
         {
