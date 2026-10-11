@@ -32,8 +32,18 @@ public sealed class SavedWindowState
     public string ProcessName { get; set; } = "";
     public string ClassName { get; set; } = "";
 
-    /// <summary>Captured for human-readability of state.json only -- never used for matching,
-    /// since a window's title churns too often (e.g. browser tabs) to be a stable identity.</summary>
+    /// <summary>Raw HWND value at capture time, as an opaque integer. HWNDs aren't stable across
+    /// a genuine restart (the OS can recycle a destroyed window's handle for an unrelated one), so
+    /// this is only ever trusted as an exact-match fast path when it still points at a live window
+    /// whose process+class also still agree (see WindowStateMatcher) -- never trusted alone. 0 in
+    /// state files saved before this existed, or whenever it fails to resolve; always safely falls
+    /// through to the process+class heuristic below.</summary>
+    public long Handle { get; set; }
+
+    /// <summary>Captured for human-readability of state.json, and as a last-resort tie-breaker
+    /// when two live windows share the same ProcessName+ClassName and neither has an exact Handle
+    /// match (see WindowStateMatcher) -- never a primary matching key, since a window's title
+    /// churns too often (e.g. browser tabs) to be trusted as a stable identity on its own.</summary>
     public string Title { get; set; } = "";
 
     public int MonitorIndex { get; set; }

@@ -411,6 +411,7 @@ internal sealed unsafe class WindowManager
             {
                 ProcessName = processName,
                 ClassName = w.ClassName,
+                Handle = (long)(nint)w.Handle.Value,
                 Title = w.Title,
                 MonitorIndex = w.MonitorIndex,
                 TagIndex = w.TagIndex,
@@ -426,15 +427,16 @@ internal sealed unsafe class WindowManager
 
     /// <summary>Restores monitor/tag placement from a previously captured state (see
     /// <see cref="CaptureState"/>), matching saved windows to currently-tracked live ones since
-    /// HWNDs aren't stable across a restart. Matching is best-effort by process name + window
-    /// class (title excluded -- it churns, e.g. browser tabs): saved windows are matched in saved
-    /// order, FIFO, against not-yet-claimed live windows; an unmatched saved record is dropped,
-    /// and a live window with no matching record just keeps whatever placement Seed()/TryAdd
-    /// already gave it -- for a window that matched a tag rule in TryAdd that means the rule's
-    /// placement, so rules are the fallback for a window with no record while state.json wins
-    /// for one that has one: state is about windows already open, rules about where a window
-    /// *opens* (see TagRule). Called at startup and from ReloadCommand -- never on the hot
-    /// path.</summary>
+    /// HWNDs aren't reliably stable across a restart. Matching is delegated to
+    /// <see cref="WindowStateMatcher"/>'s three-tier precedence (exact handle, then title
+    /// tie-break, then process+class FIFO -- see its doc comment); saved windows are walked in
+    /// saved order and applied in the order they resolve, against not-yet-claimed live windows.
+    /// An unmatched saved record is dropped, and a live window with no matching record just keeps
+    /// whatever placement Seed()/TryAdd already gave it -- for a window that matched a tag rule in
+    /// TryAdd that means the rule's placement, so rules are the fallback for a window with no
+    /// record while state.json wins for one that has one: state is about windows already open,
+    /// rules about where a window *opens* (see TagRule). Called at startup and from ReloadCommand
+    /// -- never on the hot path.</summary>
     public void ApplySavedState(SavedState state)
     {
         if (IsTaskbarHidden != state.IsTaskbarHidden)
@@ -452,24 +454,27 @@ internal sealed unsafe class WindowManager
             monitor.IsViewingAllTags = saved.IsViewingAllTags;
         }
 
-        var liveProcessNames = new Dictionary<HWND, string>();
+        var liveSnapshots = new List<LiveWindowSnapshot>(_windows.Count);
+        var liveByHandle = new Dictionary<long, ManagedWindow>();
         foreach (ManagedWindow w in _windows)
         {
             WindowInspector.TryGetProcessName(w.Handle, out string processName);
-            liveProcessNames[w.Handle] = processName;
+            long handle = (long)(nint)w.Handle.Value;
+            liveSnapshots.Add(new LiveWindowSnapshot(handle, processName, w.ClassName, w.Title));
+            liveByHandle[handle] = w;
         }
+
+        Dictionary<int, long> matches = WindowStateMatcher.Match(state.Windows, liveSnapshots);
 
         var claimed = new HashSet<HWND>();
         var restored = new List<ManagedWindow>();
-        foreach (SavedWindowState saved in state.Windows)
+        for (int i = 0; i < state.Windows.Count; i++)
         {
-            if (string.IsNullOrEmpty(saved.ProcessName))
-                continue; // never matches -- avoids false positives between two access-denied windows
-
-            ManagedWindow? match = _windows.Find(w =>
-                !claimed.Contains(w.Handle) && w.ClassName == saved.ClassName && liveProcessNames[w.Handle] == saved.ProcessName);
-            if (match is null)
+            if (!matches.TryGetValue(i, out long liveHandle))
                 continue;
+
+            ManagedWindow match = liveByHandle[liveHandle];
+            SavedWindowState saved = state.Windows[i];
 
             claimed.Add(match.Handle);
             match.MonitorIndex = Math.Clamp(saved.MonitorIndex, 0, _monitors.Count - 1);
